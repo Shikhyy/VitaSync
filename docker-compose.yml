@@ -1,0 +1,169 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL ───────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: vitasync-postgres
+    environment:
+      POSTGRES_DB: vitasync
+      POSTGRES_USER: vitasync
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vitasync"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: vitasync-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MindsDB ─────────────────────────────────────────────────────
+  mindsdb:
+    image: mindsdb/mindsdb:latest
+    container_name: vitasync-mindsdb
+    ports:
+      - "47334:47334"
+      - "47335:47335"
+    volumes:
+      - mindsdb_data:/root/mindsdb_storage
+    environment:
+      MINDSDB_STORAGE_DIR: /root/mindsdb_storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── MinIO (document storage) ─────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: vitasync-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: vitasync
+      MINIO_ROOT_PASSWORD: password123
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ── FastAPI backend ───────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vitasync-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+      - ./models:/models
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://vitasync:password@postgres:5432/vitasync
+      REDIS_URL: redis://redis:6379/0
+      MINDSDB_URL: http://mindsdb:47334
+      MINIO_URL: minio:9000
+      MINIO_ACCESS_KEY: vitasync
+      MINIO_SECRET_KEY: password123
+      VLLM_URL: http://vllm:8001
+      DEV_MODE: "true"
+      SECRET_KEY: "replace-this-in-production-minimum-32-chars"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── Celery worker ─────────────────────────────────────────────────
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vitasync-celery
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
+    volumes:
+      - ./backend:/app
+      - ./models:/models
+    environment:
+      DATABASE_URL: postgresql+asyncpg://vitasync:password@postgres:5432/vitasync
+      REDIS_URL: redis://redis:6379/0
+      DEV_MODE: "true"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Celery beat (scheduler) ───────────────────────────────────────
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vitasync-celery-beat
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+    volumes:
+      - ./backend:/app
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DEV_MODE: "true"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Frontend ──────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vitasync-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+  # ── vLLM (AMD MI300X) — only enabled in production ────────────────
+  # vllm:
+  #   image: vllm/vllm-openai:latest
+  #   container_name: vitasync-vllm
+  #   command: >
+  #     --model Qwen/Qwen2.5-72B-Instruct
+  #     --tensor-parallel-size 1
+  #     --dtype float16
+  #     --max-model-len 32768
+  #     --port 8001
+  #   devices:
+  #     - /dev/kfd
+  #     - /dev/dri
+  #   group_add:
+  #     - video
+  #     - render
+  #   ports:
+  #     - "8001:8001"
+  #   ipc: host
+
+volumes:
+  postgres_data:
+  mindsdb_data:
+  minio_data:
