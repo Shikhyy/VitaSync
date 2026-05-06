@@ -1,0 +1,90 @@
+.chart-tabs {
+  display: flex;
+  gap: var(--space-sm);
+  border-bottom: 0.5px solid var(--bd-border);
+  padding-bottom: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.chart-tab {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 2px;
+  padding: 10px 20px;
+  background: none;
+  border: 0.5px solid transparent;
+  border-radius: 2px;
+  color: var(--bd-cream-60);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.chart-tab:hover { color: var(--bd-cream); }
+.chart-tab.active {
+  color: var(--bd-orange);
+  border-color: var(--bd-border);
+  background: var(--bd-orange-muted);
+}
+
+.tab-alert-dot {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.chart-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+  animation: fadeUp 0.4s var(--ease-out) both;
+}
+
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.chart-trend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.chart-wrapper {
+  height: 280px;
+}
+
+/* Risk bars */
+.insights-risk { margin-top: 0; }
+
+.risk-bars-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-xl);
+}
+
+.risk-bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.risk-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+@media (max-width: 768px) {
+  .risk-bars-grid { grid-template-columns: 1fr; }
+  .chart-wrapper { height: 200px; }
+}
