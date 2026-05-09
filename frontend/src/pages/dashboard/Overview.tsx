@@ -24,14 +24,14 @@ export default function DashboardOverview() {
     gsap.set('.dash-page-title', { y: 30, opacity: 0 })
     gsap.set('.eyebrow', { y: 20, opacity: 0 })
     gsap.set('.dash-header-actions', { opacity: 0 })
-    gsap.set('.feat-card', { y: 40, opacity: 0 })
+    gsap.set('.feat-card', { y: 15, opacity: 0 })
     gsap.set('.ml-bar-fill', { scaleX: 0 })
 
-    tl.to('.eyebrow', { y: 0, opacity: 1, duration: 0.8, stagger: 0.1 }, 0.2)
-      .to('.dash-page-title', { y: 0, opacity: 1, duration: 0.8 }, 0.4)
-      .to('.dash-header-actions', { opacity: 1, duration: 0.8 }, 0.6)
-      .to('.feat-card', { y: 0, opacity: 1, duration: 0.8, stagger: 0.1 }, 0.8)
-      .to('.ml-bar-fill', { scaleX: 1, duration: 1.5, ease: 'power2.out', stagger: 0.1 }, 1.2)
+    tl.to('.eyebrow', { y: 0, opacity: 1, duration: 0.4, stagger: 0.05 }, 0.1)
+      .to('.dash-page-title', { y: 0, opacity: 1, duration: 0.4 }, 0.15)
+      .to('.dash-header-actions', { opacity: 1, duration: 0.4 }, 0.2)
+      .to('.feat-card', { y: 0, opacity: 1, duration: 0.5, stagger: 0.05 }, 0.3)
+      .to('.ml-bar-fill', { scaleX: 1, duration: 0.8, ease: 'power2.out', stagger: 0.05 }, 0.5)
   }, { scope: containerRef })
 
   useEffect(() => {

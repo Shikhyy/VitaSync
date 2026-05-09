@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { usePatientStore } from '../../stores/patientStore'
 import { useAlertWebSocket } from '../../hooks/useAlertWebSocket'
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { to: '/dashboard/insights', label: 'Insights', icon: '📊', id: 'nav-insights' },
   { to: '/dashboard/consent', label: 'Consent', icon: '🔐', id: 'nav-consent' },
   { to: '/dashboard/alerts', label: 'Alerts', icon: '🔔', id: 'nav-alerts' },
+  { to: '/dashboard/consultations', label: 'Consultations', icon: '📅', id: 'nav-consultations' },
 ]
 
 export default function DashboardLayout() {
@@ -30,10 +31,10 @@ export default function DashboardLayout() {
       {/* Sidebar */}
       <aside className={`dash-sidebar ${sidebarOpen ? 'open' : ''}`} aria-label="Dashboard navigation">
         <div className="dash-sidebar-header">
-          <div className="dash-logo">
+          <Link to="/" className="dash-logo" style={{ textDecoration: 'none' }}>
             <span className="nav-logo-dot" />
             <span className="nav-logo-text">VITA<span className="nav-logo-accent">SYNC</span></span>
-          </div>
+          </Link>
           <button
             className="dash-sidebar-close"
             onClick={() => setSidebarOpen(false)}
@@ -75,10 +76,6 @@ export default function DashboardLayout() {
         </nav>
 
         <div className="dash-sidebar-footer">
-          <NavLink to="/doctor" className="dash-nav-item" id="nav-doctor-portal">
-            <span className="dash-nav-icon" role="img" aria-label="Doctor Portal">🩺</span>
-            <span className="dash-nav-label">Doctor Portal</span>
-          </NavLink>
           <button className="dash-nav-item dash-logout" onClick={handleLogout} id="dash-logout-btn">
             <span className="dash-nav-icon" aria-hidden="true">→</span>
             <span className="dash-nav-label">Sign Out</span>
@@ -107,10 +104,10 @@ export default function DashboardLayout() {
           >
             ☰
           </button>
-          <div className="dash-logo">
+          <Link to="/" className="dash-logo" style={{ textDecoration: 'none' }}>
             <span className="nav-logo-dot" />
             <span className="nav-logo-text" style={{ fontSize: 16 }}>VITA<span className="nav-logo-accent">SYNC</span></span>
-          </div>
+          </Link>
           <div className="dash-topbar-actions">
             <div className="live-dot" aria-label="System online" />
             <span className="body-small" style={{ color: 'var(--bd-muted)' }}>Live</span>
