@@ -1,18 +1,18 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { mockDoctorQueryResponse } from '../../lib/api'
 import './Doctor.css'
 
 const SAMPLE_QUESTIONS = [
   'Does this patient have any history of cardiac events?',
-  'What medications is the patient currently taking? Any drug interactions to watch for?',
+  'What medications is the patient currently taking?',
   'What are the trends in HbA1c over the past 2 years?',
   'Is the patient at high risk for chronic kidney disease?',
-  'Summarise the patient\'s complete medical history for a new specialist.',
+  'Summarise the patient\'s medical history.',
 ]
 
 export default function PatientQuery() {
-  const { id } = useParams()
+  useParams()
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [response, setResponse] = useState<typeof mockDoctorQueryResponse | null>(null)
@@ -29,147 +29,134 @@ export default function PatientQuery() {
   }
 
   return (
-    <div className="doctor-query-page" id="doctor-query-page">
-      <nav className="nav" aria-label="Doctor query navigation">
-        <div className="nav-inner container">
-          <div className="nav-logo">
-            <span className="nav-logo-dot" />
-            <span className="nav-logo-text">VITA<span className="nav-logo-accent">SYNC</span></span>
+    <div className="doctor-portal-wrapper">
+      {/* Unified Header */}
+      <header className="doctor-header">
+        <div className="header-titles">
+          <span className="eyebrow">Clinician Overview · Patient VS-4729-A</span>
+          <h1 className="display-section">ASK THE <span className="italic-accent">brain.</span></h1>
+          <p className="body-small" style={{ color: 'var(--bd-muted)', marginTop: 4 }}>
+            Qwen 72B · PubMedBERT RAG · X402 gated
+          </p>
+        </div>
+        <div className="header-actions">
+           <div className="live-indicator">
+              <div className="live-dot" />
+              <span>INFERENCE ACTIVE</span>
+           </div>
+        </div>
+      </header>
+
+      <div className="query-layout">
+        {/* Input Panel */}
+        <div className="query-panel">
+          <div className="aside-widget" style={{ padding: 'var(--space-lg)' }}>
+            <label className="input-label">Clinical Question</label>
+            <textarea
+              className="input"
+              style={{ minHeight: 140, resize: 'none', background: 'rgba(0,0,0,0.2)', border: '0.5px solid var(--bd-border)' }}
+              placeholder="e.g. Does this patient have any history of cardiac events?"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(query)
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+              <span className="body-small" style={{ color: 'var(--bd-muted)', fontSize: 10 }}>⌘ + ENTER TO SUBMIT</span>
+              <button
+                className="btn-primary"
+                onClick={() => handleSubmit(query)}
+                disabled={loading || !query.trim()}
+                style={{ padding: '10px 24px', fontSize: 11 }}
+              >
+                {loading ? 'Processing...' : 'Query →'}
+              </button>
+            </div>
           </div>
-          <div className="nav-links">
-            <Link to="/doctor" className="nav-link">← All Patients</Link>
-            <Link to={`/doctor/patient/${id}/prescribe`} className="nav-link">Drug Check</Link>
+
+          <div className="sample-questions" style={{ marginTop: 'var(--space-xl)' }}>
+            <span className="eyebrow" style={{ fontSize: 10, display: 'block', marginBottom: 12 }}>Suggested Queries</span>
+            <div className="sample-list" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {SAMPLE_QUESTIONS.map((q) => (
+                <button
+                  key={q}
+                  className="sample-question"
+                  onClick={() => { setQuery(q); handleSubmit(q) }}
+                  style={{ 
+                    background: 'rgba(255,255,255,0.02)', 
+                    border: '0.5px solid var(--bd-border)',
+                    padding: '12px 16px',
+                    textAlign: 'left',
+                    color: 'var(--bd-cream-60)',
+                    fontSize: 12,
+                    borderRadius: 2,
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </nav>
 
-      <main className="container query-main" id="main-content">
-        <div className="query-layout">
-          {/* Query panel */}
-          <div className="query-panel">
-            <div className="query-header">
-              <span className="eyebrow">Patient ID: VS-4729-A</span>
-              <h1 className="display-section" style={{ fontSize: 36, letterSpacing: 2 }}>
-                ASK THE <span className="italic-accent">brain.</span>
-              </h1>
-              <p className="body-small" style={{ color: 'var(--bd-muted)' }}>
-                Qwen 72B · PubMedBERT RAG · X402 gated · All inference on-premise
-              </p>
-            </div>
-
-            <div className="query-input-area feat-card">
-              <label htmlFor="query-input" className="input-label">Clinical Question</label>
-              <textarea
-                id="query-input"
-                className="input query-textarea"
-                placeholder="e.g. Does this patient have any history of cardiac events?"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                rows={4}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(query)
-                }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="body-small" style={{ color: 'var(--bd-muted)' }}>⌘ + Enter to submit</span>
-                <button
-                  className="btn-primary"
-                  onClick={() => handleSubmit(query)}
-                  disabled={loading || !query.trim()}
-                  id="query-submit-btn"
-                >
-                  {loading ? <><span className="spinner" />Querying Qwen 72B…</> : 'Query →'}
-                </button>
-              </div>
-            </div>
-
-            {/* Sample questions */}
-            <div className="sample-questions">
-              <span className="eyebrow" style={{ fontSize: 10 }}>Sample Questions</span>
-              <div className="sample-list">
-                {SAMPLE_QUESTIONS.map((q) => (
-                  <button
-                    key={q}
-                    className="sample-question"
-                    onClick={() => { setQuery(q); handleSubmit(q) }}
-                    id={`sample-q-${SAMPLE_QUESTIONS.indexOf(q)}`}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Response panel */}
-          <div className="response-panel">
-            {loading && (
-              <div className="response-loading feat-card">
-                <div className="loading-pipeline">
-                  {['Embedding query', 'Semantic search', 'ML context', 'Qwen 72B inference', 'Formatting'].map((step, i) => (
-                    <div key={step} className="pipeline-step" style={{ animationDelay: `${i * 0.3}s` }}>
-                      <div className="pipeline-dot" />
+        {/* Result Panel */}
+        <div className="response-panel">
+          {loading && (
+            <div className="aside-widget" style={{ minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+               <div className="loading-pipeline">
+                  {['Embedding query', 'Semantic search', 'ML context', 'Qwen 72B inference'].map((step, i) => (
+                    <div key={step} className="pipeline-step" style={{ animationDelay: `${i * 0.3}s`, marginBottom: 8 }}>
+                      <div className="live-dot" />
                       <span className="body-small">{step}…</span>
                     </div>
                   ))}
                 </div>
+            </div>
+          )}
+
+          {response && !loading && (
+            <div className="aside-widget" id="query-response">
+              <div className="widget-header">
+                <span className="eyebrow">Brain Inference</span>
+                <span className="badge" style={{ background: 'var(--bd-orange-muted)', color: 'var(--bd-orange)' }}>
+                  {Math.round(response.confidence * 100)}% Confidence
+                </span>
               </div>
-            )}
 
-            {response && !loading && (
-              <div className="response-card feat-card" id="query-response">
-                <div className="response-header">
-                  <span className="eyebrow">Answer</span>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <span className="badge badge-success">Confidence: {Math.round(response.confidence * 100)}%</span>
-                    <span className="body-small" style={{ color: 'var(--bd-muted)' }}>{response.latencyMs}ms</span>
-                  </div>
-                </div>
+              <div className="response-text" style={{ fontSize: 14, lineHeight: 1.8, color: 'var(--bd-cream-60)', margin: '16px 0' }}>
+                {response.answer}
+              </div>
 
-                <p className="response-text">{response.answer}</p>
+              <div className="divider" style={{ margin: '24px 0' }} />
 
-                <div className="response-sources">
-                  <span className="eyebrow" style={{ fontSize: 10, marginBottom: 8, display: 'block' }}>Sources</span>
-                  {response.sources.map((src, i) => (
-                    <div key={i} className="source-item">
-                      <div className="source-relevance" style={{ width: `${src.relevance * 100}%` }} />
-                      <div className="source-info">
-                        <span className="source-title">{src.title}</span>
-                        <span className="body-small">{src.date} · {src.source}</span>
-                      </div>
-                      <span className="body-small" style={{ color: 'var(--bd-orange)', flexShrink: 0 }}>
-                        {Math.round(src.relevance * 100)}% match
-                      </span>
+              <div className="response-sources">
+                <span className="eyebrow" style={{ fontSize: 10, marginBottom: 12, display: 'block' }}>RAG Sources</span>
+                {response.sources.map((src, i) => (
+                  <div key={i} className="source-item" style={{ padding: '12px 0', borderBottom: '0.5px solid var(--bd-border)' }}>
+                    <div className="source-info">
+                      <span className="source-title" style={{ display: 'block', fontSize: 13, color: 'var(--bd-cream)' }}>{src.title}</span>
+                      <span className="body-small" style={{ fontSize: 11 }}>{src.date} · {src.source}</span>
                     </div>
-                  ))}
-                </div>
-
-                <div className="response-ml-context">
-                  <span className="eyebrow" style={{ fontSize: 10 }}>ML Risk Context</span>
-                  <span className="body-small">
-                    Cardiovascular risk: {Math.round((response.mlContext.cardiovascularRisk) * 100)}% ·
-                    Active alerts: {response.mlContext.alertCount}
-                  </span>
-                </div>
-
-                <div className="response-disclaimer body-small">
-                  ⚠ This answer is informational only. Always verify against source documents and apply your clinical judgement.
-                  VitaSync does not make diagnoses.
-                </div>
+                  </div>
+                ))}
               </div>
-            )}
 
-            {!response && !loading && (
-              <div className="response-empty feat-card">
-                <span style={{ fontSize: 48 }} role="img" aria-label="Brain">🧠</span>
-                <p className="body-small" style={{ color: 'var(--bd-muted)', textAlign: 'center' }}>
-                  Ask a clinical question to query this patient's medical brain.
-                </p>
+              <div className="response-disclaimer body-small" style={{ marginTop: 24, padding: 12, background: 'rgba(255, 131, 79, 0.05)', borderRadius: 2, borderLeft: '2px solid var(--bd-orange)' }}>
+                ⚠ AI-generated. Verify against clinical documentation.
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {!response && !loading && (
+            <div className="aside-widget" style={{ minHeight: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', opacity: 0.5 }}>
+              <span style={{ fontSize: 40, marginBottom: 16 }}>🧠</span>
+              <p className="body-small">Enter a clinical question to query<br />this patient's medical history.</p>
+            </div>
+          )}
         </div>
-      </main>
+      </div>
     </div>
   )
 }
