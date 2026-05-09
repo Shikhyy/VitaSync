@@ -41,7 +41,7 @@ export default function HeroSection() {
       <div className="hero-content container">
         <div className="hero-eyebrow">
           <div className="live-dot" />
-          <span className="eyebrow">AMD MI300X · Qwen 72B · On-Premise · Open Source</span>
+          <span className="eyebrow">HIPAA-Compliant · Qwen 72B · Secure Cloud · Open Source</span>
         </div>
 
         <h1 className="display-hero hero-title" id="hero-title">
@@ -52,7 +52,7 @@ export default function HeroSection() {
 
         <p className="hero-subtitle">
           VitaSync unifies fragmented patient records into a single, queryable AI health
-          intelligence layer. All inference on-premise. Zero data leaving your hardware.
+          intelligence layer. All inference in a secure cloud. Zero data leaving your sovereign environment.
         </p>
 
         <div className="hero-ctas">

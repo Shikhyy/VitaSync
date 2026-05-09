@@ -12,7 +12,7 @@ const STATS: Stat[] = [
   { value: 94, suffix: ' tok/s', label: 'Qwen 72B Throughput', description: 'AMD MI300X, single card' },
   { value: 2.4, suffix: 's', label: 'Query Latency P95', description: 'Semantic search + LLM answer' },
   { value: 3.1, suffix: 's', label: 'Ingestion Speed', description: 'Per document, any format' },
-  { value: 192, suffix: 'GB', label: 'HBM3 VRAM', description: 'Zero cloud, full privacy moat' },
+  { value: 99.9, suffix: '%', label: 'Uptime', description: 'Secure cloud, full privacy moat' },
 ]
 
 export default function StatsStrip() {

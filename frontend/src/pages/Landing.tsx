@@ -1,9 +1,14 @@
-import { useRef, useEffect } from 'react'
+import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 import HeroSection from '../components/HeroSection'
 import StatsStrip from '../components/StatsStrip'
 import AgentFlow from '../components/AgentFlow'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useGSAP } from '@gsap/react'
 import './Landing.css'
+
+gsap.registerPlugin(ScrollTrigger)
 
 const FEATURES = [
   {
@@ -18,9 +23,9 @@ const FEATURES = [
   {
     id: 'privacy',
     size: 'small',
-    eyebrow: 'On-Premise',
-    title: 'ZERO CLOUD.',
-    body: 'Every byte stays on your hardware. AMD MI300X. ROCm 6.0. Zero external AI calls at runtime.',
+    eyebrow: 'Secure Cloud',
+    title: 'ENTERPRISE CLOUD.',
+    body: 'Every byte stays in a sovereign, encrypted cloud environment. Zero third-party data sharing at runtime.',
     tags: ['AMD MI300X', 'Apache 2.0'],
     stat: null,
   },
@@ -65,25 +70,29 @@ const STACK_ITEMS = [
 ]
 
 export default function Landing() {
-  const featuresRef = useRef<HTMLDivElement>(null)
+  const mainRef = useRef<HTMLElement>(null)
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('visible')
+  useGSAP(() => {
+    // Reveal animations for all .reveal elements
+    gsap.utils.toArray('.reveal').forEach((el: any) => {
+      gsap.fromTo(el,
+        { y: 15, opacity: 0 },
+        {
+          y: 0,
+          opacity: 1,
+          duration: 0.5,
+          ease: 'power2.out',
+          scrollTrigger: {
+            trigger: el,
+            start: 'top 85%',
           }
-        })
-      },
-      { threshold: 0.1 }
-    )
-    document.querySelectorAll('.reveal').forEach((el) => observer.observe(el))
-    return () => observer.disconnect()
-  }, [])
+        }
+      )
+    })
+  }, { scope: mainRef })
 
   return (
-    <main id="main-content">
+    <main id="main-content" ref={mainRef}>
       <HeroSection />
       <StatsStrip />
 
@@ -97,12 +106,11 @@ export default function Landing() {
             </h2>
           </div>
 
-          <div className="features-grid" ref={featuresRef}>
-            {FEATURES.map((f, i) => (
+          <div className="features-grid">
+            {FEATURES.map((f) => (
               <div
                 key={f.id}
                 className={`feat-card feature-card feature-card--${f.size} reveal`}
-                style={{ animationDelay: `${i * 0.1}s` }}
                 id={`feature-${f.id}`}
               >
                 <span className="eyebrow">{f.eyebrow}</span>
@@ -142,8 +150,8 @@ export default function Landing() {
           </div>
 
           <div className="stack-grid reveal">
-            {STACK_ITEMS.map((item, i) => (
-              <div className="stack-item" key={item.layer} style={{ animationDelay: `${i * 0.08}s` }}>
+            {STACK_ITEMS.map((item) => (
+              <div className="stack-item reveal" key={item.layer}>
                 <div className="stack-layer eyebrow">{item.layer}</div>
                 <div className="stack-tech">{item.tech}</div>
                 <div className="stack-detail body-small">{item.detail}</div>
@@ -166,8 +174,8 @@ export default function Landing() {
               BUILD THE<br /><span className="italic-accent">future</span><br />OF CARE.
             </h2>
             <p className="body-text" style={{ maxWidth: 480, marginBottom: 40 }}>
-              Self-host on AMD hardware. Contribute to the community. Or deploy on our managed cloud.
-              No vendor lock-in. No data leaving your walls.
+              Deploy securely on enterprise cloud infrastructure. Contribute to the open-source community.
+              No vendor lock-in. No data leaving your secure sovereign boundaries.
             </p>
             <div className="cta-actions">
               <Link to="/onboard/signup" className="btn-primary" id="cta-get-started-btn">

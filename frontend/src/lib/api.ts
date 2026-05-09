@@ -20,10 +20,10 @@ export const mockPatientData = {
   },
   riskScores: { diabetes: 0.34, cardiovascular: 0.18, ckd: 0.09 },
   documents: [
-    { id: '1', fileType: 'pdf', documentType: 'Lab Report', sourceName: 'City Diagnostic Lab', documentDate: '2024-03-14', ingestionStatus: 'done', entityCount: 23, createdAt: '2024-03-14T10:00:00Z' },
-    { id: '2', fileType: 'pdf', documentType: 'Discharge Summary', sourceName: 'Apollo Hospital', documentDate: '2023-11-20', ingestionStatus: 'done', entityCount: 47, createdAt: '2023-11-20T15:30:00Z' },
-    { id: '3', fileType: 'jpeg', documentType: 'Prescription', sourceName: 'Dr. Sharma Clinic', documentDate: '2024-01-08', ingestionStatus: 'done', entityCount: 12, createdAt: '2024-01-08T09:15:00Z' },
-    { id: '4', fileType: 'pdf', documentType: 'ECG Report', sourceName: 'Cardiology Centre', documentDate: '2023-09-05', ingestionStatus: 'done', entityCount: 8, createdAt: '2023-09-05T14:00:00Z' },
+    { id: '1', fileType: 'pdf', documentType: 'Lab Report', sourceName: 'City Diagnostic Lab', documentDate: '2024-03-14', ingestionStatus: 'done' as const, entityCount: 23, createdAt: '2024-03-14T10:00:00Z' },
+    { id: '2', fileType: 'pdf', documentType: 'Discharge Summary', sourceName: 'Apollo Hospital', documentDate: '2023-11-20', ingestionStatus: 'done' as const, entityCount: 47, createdAt: '2023-11-20T15:30:00Z' },
+    { id: '3', fileType: 'jpeg', documentType: 'Prescription', sourceName: 'Dr. Sharma Clinic', documentDate: '2024-01-08', ingestionStatus: 'done' as const, entityCount: 12, createdAt: '2024-01-08T09:15:00Z' },
+    { id: '4', fileType: 'pdf', documentType: 'ECG Report', sourceName: 'Cardiology Centre', documentDate: '2023-09-05', ingestionStatus: 'done' as const, entityCount: 8, createdAt: '2023-09-05T14:00:00Z' },
   ],
   alerts: [
     { id: 'a1', type: 'trend_change', severity: 'warning', title: 'HbA1c Trending Up', body: 'HbA1c has increased by 0.4% over the past 6 months. Current: 7.2%. Personal baseline: 6.8%. Consider reviewing diet and medication.', sourceLabName: 'HbA1c', mlScore: 0.71, isRead: false, createdAt: '2024-03-14T10:30:00Z' },

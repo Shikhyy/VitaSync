@@ -1,5 +1,10 @@
+import { useRef } from 'react'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useGSAP } from '@gsap/react'
 import './AgentFlow.css'
 
+gsap.registerPlugin(ScrollTrigger)
 interface Agent {
   id: string
   number: string
@@ -53,8 +58,36 @@ const AGENTS: Agent[] = [
 ]
 
 export default function AgentFlow() {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useGSAP(() => {
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: containerRef.current,
+        start: 'top 75%',
+      }
+    })
+
+    // Prepare elements
+    gsap.set('.agent-node', { y: 15, opacity: 0 })
+    gsap.set('.agent-arrow', { scaleX: 0, transformOrigin: 'left center' })
+    gsap.set('.agent-callout', { y: 15, opacity: 0 })
+
+    // Animate flow
+    AGENTS.forEach((agent, i) => {
+      tl.to(`#agent-card-${agent.id}`, { y: 0, opacity: 1, duration: 0.4, ease: 'power2.out' })
+      if (i < AGENTS.length - 1) {
+        tl.to(`.agent-arrow:nth-of-type(${i + 1})`, { scaleX: 1, duration: 0.2, ease: 'power1.inOut' }, '-=0.1')
+      }
+    })
+
+    // Animate callout
+    tl.to('.agent-callout', { y: 0, opacity: 1, duration: 0.5, ease: 'power2.out' }, '-=0.2')
+
+  }, { scope: containerRef })
+
   return (
-    <section className="agent-section section" id="agents">
+    <section className="agent-section section" id="agents" ref={containerRef}>
       <div className="container">
         <div className="section-header">
           <span className="eyebrow">Multi-Agent Architecture</span>

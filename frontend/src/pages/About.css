@@ -1,0 +1,108 @@
+.about-page {
+  padding-top: var(--nav-height);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.about-header {
+  padding: var(--space-3xl) 0 var(--space-xl);
+  border-bottom: 0.5px solid var(--bd-border);
+}
+
+.about-title {
+  margin-top: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.about-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2xl);
+  padding: var(--space-2xl) 0;
+}
+
+@media (min-width: 768px) {
+  .about-content {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3xl);
+  }
+}
+
+.about-image-wrapper {
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 0.5px solid var(--bd-border);
+  aspect-ratio: 4 / 3;
+}
+
+.about-image-wrapper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(26, 18, 8, 0.8), transparent);
+  pointer-events: none;
+}
+
+.about-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: grayscale(100%) contrast(1.2);
+  transition: filter 0.5s ease;
+}
+
+.about-image-wrapper:hover .about-image {
+  filter: grayscale(50%) contrast(1.1);
+}
+
+.about-text-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.about-mission {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  color: var(--bd-cream);
+  line-height: 1.4;
+  border-left: 2px solid var(--bd-orange);
+  padding-left: var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+
+.about-values {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+  margin-top: var(--space-xl);
+}
+
+@media (min-width: 640px) {
+  .about-values {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.value-card {
+  background: var(--bd-cream-faint);
+  border: 0.5px solid var(--bd-border);
+  padding: var(--space-lg);
+  border-radius: 2px;
+  transition: transform 0.3s ease;
+}
+
+.value-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--bd-border-hover);
+}
+
+.value-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--bd-cream);
+  margin-bottom: var(--space-sm);
+  letter-spacing: 1px;
+}
