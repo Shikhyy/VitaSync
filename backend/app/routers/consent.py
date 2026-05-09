@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -42,7 +43,6 @@ async def request_consent(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only doctors can request consent",
         )
-    import uuid
     consent_id = str(uuid.uuid4())
     consent = {
         "id": consent_id,

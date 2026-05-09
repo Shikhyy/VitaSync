@@ -82,7 +82,7 @@ class MedicalSemanticSearch:
         query_embedding = self._embedder.encode([query])[0].tolist()
 
         # Build raw SQL for pgvector cosine distance search (<=>)
-        sql = text(f"""
+        sql = text("""
             SELECT document_id, chunk_text, 1 - (embedding <=> :embedding) AS similarity
             FROM document_chunks
             WHERE patient_id = :patient_id

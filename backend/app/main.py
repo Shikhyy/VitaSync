@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, ingest, query, consent, monitor, health, prescribe
+from app.routers import auth, ingest, query, consent, monitor, health, prescribe, communication, consultation
 
 logger = logging.getLogger(__name__)
+
+# Allow overriding allowed origins via environment variable (comma-separated)
+_raw_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:3000",
+)
+ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 
 @asynccontextmanager
@@ -34,7 +42,7 @@ app = FastAPI(
 # ── CORS ────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,4 +55,6 @@ app.include_router(query.router,   prefix="/query",   tags=["query"])
 app.include_router(prescribe.router, prefix="/prescribe", tags=["prescribe"])
 app.include_router(consent.router, prefix="/consent", tags=["consent"])
 app.include_router(monitor.router, prefix="/monitor", tags=["monitoring"])
+app.include_router(communication.router, prefix="/communication", tags=["communication"])
+app.include_router(consultation.router, prefix="/consultations", tags=["consultation"])
 app.include_router(health.router,  prefix="/health",  tags=["health"])

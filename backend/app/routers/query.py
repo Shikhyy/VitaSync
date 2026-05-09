@@ -117,7 +117,7 @@ async def query_patient_brain(
         sources=[
             QuerySource(
                 title=f"Document {s.get('document_id', 'Unknown')}",
-                date="Unknown", # we don't have date in the chunk currently
+                date="Unknown",  # we don't have date in the chunk currently
                 source="Extracted Data",
                 relevance=s.get("similarity", 0.85),
             )

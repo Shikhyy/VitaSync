@@ -29,7 +29,6 @@ class RiskPredictor:
 
     def _load_models(self) -> None:
         """Load all three risk models from /models/."""
-        from sklearn.ensemble import GradientBoostingClassifier
         import pickle
 
         model_paths = {
