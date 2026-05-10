@@ -24,7 +24,23 @@
   gap: var(--space-md);
   align-items: center;
   flex: 1;
-  max-width: 600px;
+  max-width: 760px;
+}
+
+.x402-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  padding: 10px 14px;
+  border: 0.5px solid rgba(74, 222, 128, 0.25);
+  background: rgba(74, 222, 128, 0.06);
+  border-radius: 999px;
+  color: var(--color-success);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
 }
 
 .search-pill {
@@ -112,13 +128,27 @@
 .patient-row-card {
   display: flex;
   flex-direction: column;
-  background: var(--bd-warm-dark);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 131, 79, 0.08), transparent 28%),
+    var(--bd-warm-dark);
   padding: var(--space-lg);
   transition: background 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
 
 .patient-row-card:hover {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.row-rail {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--bd-orange), var(--color-success), var(--bd-orange));
+  background-size: 100% 220%;
+  animation: verticalRail 3s linear infinite;
+  opacity: 0.9;
 }
 
 .row-main {
@@ -261,6 +291,40 @@
   border: 0.5px solid var(--bd-border);
   border-radius: 4px;
   padding: var(--space-lg);
+}
+
+.payment-stack {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 18px;
+}
+
+.payment-stack span {
+  position: relative;
+  display: block;
+  padding: 10px 12px 10px 28px;
+  border: 0.5px solid var(--bd-border);
+  background: rgba(248, 247, 229, 0.035);
+  color: var(--bd-cream-60);
+  font-size: 11px;
+}
+
+.payment-stack span::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bd-orange);
+  transform: translateY(-50%);
+  box-shadow: 0 0 14px rgba(255, 131, 79, 0.55);
+}
+
+@keyframes verticalRail {
+  from { background-position: 0 0%; }
+  to { background-position: 0 220%; }
 }
 
 .widget-header {
