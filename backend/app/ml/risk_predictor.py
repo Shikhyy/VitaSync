@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -16,7 +17,7 @@ class RiskPredictor:
     Predicts 3-year risk for Diabetes, Cardiovascular Disease, and CKD.
     Models trained on Framingham-derived features + MIMIC-III cohort.
 
-    In dev mode: returns fixed mock risk scores.
+    In dev mode: returns fallback heuristic risk scores.
     In production: loads pre-trained GBM models from /models/.
     """
 
@@ -37,6 +38,12 @@ class RiskPredictor:
             "_ckd_model": "/models/ckd_gbm.pkl",
         }
         for attr, path in model_paths.items():
+            if not Path(path).exists():
+                logger.warning(
+                    "Risk model %s is missing; using rule-based fallback predictions",
+                    path,
+                )
+                return
             with open(path, "rb") as f:
                 setattr(self, attr, pickle.load(f))
         logger.info("Risk predictor models loaded (diabetes, CVD, CKD)")
@@ -60,9 +67,16 @@ class RiskPredictor:
         Returns:
             Dict with 'diabetes', 'cardiovascular', 'ckd' risk scores in [0, 1].
         """
-        if settings.dev_mode:
-            return self._mock_predict(features)
+        if settings.dev_mode or not self._models_loaded:
+            return self._fallback_predict(features)
         return self._ml_predict(features)
+
+    @property
+    def _models_loaded(self) -> bool:
+        return all(
+            model is not None
+            for model in (self._diabetes_model, self._cvd_model, self._ckd_model)
+        )
 
     def get_risk_summary(self, patient_id: str) -> dict:
         """Get a summarised risk context dict for LLM prompt injection.
@@ -73,17 +87,12 @@ class RiskPredictor:
         Returns:
             Dict with diabetes, cardiovascular, ckd scores and alert_count.
         """
-        # In production: fetch latest lab values from DB by patient_id
-        mock_features = {
-            "age": 47, "bmi": 27.4, "hba1c": 7.2, "systolic_bp": 128,
-            "ldl": 2.4, "creatinine": 0.9, "fasting_glucose": 126,
-            "smoking": 0, "family_history_diabetes": 1, "family_history_cvd": 0,
-        }
-        scores = self.predict(mock_features)
-        return {**scores, "alert_count": 1 if scores.get("diabetes", 0) > 0.3 else 0}
+        # No fabricated clinical features are used here. Persisted patient features
+        # should be loaded before enabling patient-specific risk scoring.
+        return {"diabetes": 0.0, "cardiovascular": 0.0, "ckd": 0.0, "alert_count": 0}
 
-    def _mock_predict(self, features: dict[str, float]) -> dict[str, float]:
-        """Return plausible risk scores for development mode."""
+    def _fallback_predict(self, features: dict[str, float]) -> dict[str, float]:
+        """Return heuristic risk scores when trained artifacts are unavailable."""
         hba1c = features.get("hba1c", 5.5)
         bp = features.get("systolic_bp", 120)
         creatinine = features.get("creatinine", 0.9)
