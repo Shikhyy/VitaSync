@@ -20,11 +20,21 @@ export default function DashboardLayout() {
   const navigate = useNavigate()
   useAlertWebSocket()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const handleLogout = () => {
     logout()
     navigate('/')
   }
+
+  const copyUserId = async () => {
+    if (!user?.id) return
+    await navigator.clipboard?.writeText(user.id)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1400)
+  }
+
+  const displayId = user?.id ? user.id.split('-')[0] || user.id.slice(0, 8) : ''
 
   return (
     <div className="dash-layout">
@@ -53,6 +63,13 @@ export default function DashboardLayout() {
           <div className="dash-user-info">
             <div className="dash-user-name">{user?.fullName || 'User'}</div>
             <div className="dash-user-role badge">{user?.role || 'patient'}</div>
+            {user?.id && (
+              <button className="dash-id-card" onClick={copyUserId} title={`Copy patient ID: ${user.id}`} type="button">
+                <span className="dash-id-label">Patient ID</span>
+                <span className="dash-id-value">{displayId}</span>
+                <span className="dash-id-action">{copied ? 'Copied' : 'Copy'}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -110,7 +127,9 @@ export default function DashboardLayout() {
           </Link>
           <div className="dash-topbar-actions">
             <div className="live-dot" aria-label="System online" />
-            <span className="body-small" style={{ color: 'var(--bd-muted)' }}>Live</span>
+            <button className="dash-topbar-id" onClick={copyUserId} type="button" title="Copy patient ID">
+              {copied ? 'Copied' : `ID ${displayId || 'pending'}`}
+            </button>
           </div>
         </header>
 
