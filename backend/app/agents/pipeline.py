@@ -1,18 +1,25 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 
 from crewai import Agent, Task, Crew, Process
-from crewai.tools import BaseTool
+try:
+    from crewai.tools import BaseTool
+except ImportError:
+    from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.llm import vllm_client
 from app.ml.anomaly_detector import AnomalyDetector
+from app.ml.ner_pipeline import MedicalNERPipeline
 from app.ml.risk_predictor import RiskPredictor
 
 logger = logging.getLogger(__name__)
 
 anomaly_detector = AnomalyDetector()
+ner_pipeline = MedicalNERPipeline()
 risk_predictor = RiskPredictor()
 
 
@@ -51,11 +58,15 @@ class DocumentExtractorTool(BaseTool):
 
         PDF: PyMuPDF. JPEG/PNG scans: Qwen-VL OCR. DICOM: pydicom.
         """
-        if settings.dev_mode:
-            return f"[DEV MODE] Extracted text from {file_path} ({file_type}). " \
-                   "Patient: 47F. Diagnosis: T2DM. HbA1c: 7.2%. BP: 128/82mmHg."
-        # Production implementation stub
-        raise NotImplementedError("Connect PyMuPDF / Qwen-VL in production")
+        from pathlib import Path
+
+        path = Path(file_path)
+        if not path.exists():
+            logger.warning("Document extractor could not find %s", file_path)
+            return ""
+        content = path.read_bytes()
+        from app.routers.ingest import _extract_text
+        return _extract_text(content, file_type, path.name)
 
 
 class NERExtractorTool(BaseTool):
@@ -70,34 +81,21 @@ class NERExtractorTool(BaseTool):
 
         Returns structured entities for knowledge graph upsert.
         """
-        import asyncio
-        from app.db.mindsdb import mindsdb_client
-        
-        # In production this would be real BioBERT inference
-        entities = [
-            {"type": "DISEASE", "text": "Type 2 Diabetes Mellitus", "norm": "E11"},
-            {"type": "LAB_TEST", "text": "HbA1c", "norm": "4548-4"},
-            {"type": "LAB_VALUE", "text": "7.2%", "value": 7.2, "unit": "%"},
-            {"type": "DRUG", "text": "Metformin", "norm": "DB00331"},
-            {"type": "DOSAGE", "text": "500mg twice daily"},
-        ]
-        
-        # Trigger the async graph upsert using event loop if needed, but since tools run synchronously in CrewAI by default:
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(mindsdb_client.upsert_graph_nodes(entities, "patient-uuid"))
-            else:
-                loop.run_until_complete(mindsdb_client.upsert_graph_nodes(entities, "patient-uuid"))
-        except Exception as e:
-            logger.warning("Graph upsert bypassed in CrewAI sync execution: %s", e)
-            
-        if settings.dev_mode:
-            return {
-                "document_id": document_id,
-                "entities": entities,
-            }
-        raise NotImplementedError("Deploy BioBERT in production")
+        result = ner_pipeline.extract(raw_text, document_id)
+        return {
+            "document_id": document_id,
+            "entities": [
+                {
+                    "type": entity.entity_type,
+                    "text": entity.text,
+                    "norm": entity.normalised_code,
+                    "value": entity.numeric_value,
+                    "unit": entity.unit,
+                    "confidence": entity.confidence,
+                }
+                for entity in result.entities
+            ],
+        }
 
 
 class RiskAnalysisTool(BaseTool):
@@ -145,14 +143,17 @@ class LLMQueryTool(BaseTool):
     args_schema: type[BaseModel] = QueryInput
 
     def _run(self, question: str, context_docs: list[str], risk_context: dict) -> str:
-        """Generate a grounded answer using Qwen 72B via vLLM.
-
-        In dev mode: returns a mock answer.
-        """
-        if settings.dev_mode:
-            return f"[DEV MODE] Answer to '{question}': Based on {len(context_docs)} documents retrieved. " \
-                   f"Risk context: {risk_context}. Connect vLLM for real Qwen 72B inference."
-        raise NotImplementedError("Start vLLM server in production")
+        """Generate a grounded answer using Qwen 72B via vLLM."""
+        context = "\n\n".join(f"[{idx + 1}] {doc}" for idx, doc in enumerate(context_docs))
+        prompt = (
+            "You are a clinical information assistant. Answer only from the supplied patient context, "
+            "cite source numbers inline, and do not diagnose or prescribe.\n\n"
+            f"Risk context: {risk_context}\n\n"
+            f"Patient context:\n{context}\n\n"
+            f"Clinical question: {question}\n"
+            "Answer:"
+        )
+        return asyncio.run(vllm_client.generate(prompt))
 
 
 # ── CrewAI Agent Definitions ─────────────────────────────────────
