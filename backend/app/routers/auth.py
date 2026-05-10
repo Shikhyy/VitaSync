@@ -8,8 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.db.session import get_db
+from app.models.models import User
 from app.schemas.auth import (
     Token,
     TokenData,
@@ -22,9 +26,6 @@ router = APIRouter()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
-
-# ── In-memory user store (replace with DB in production) ─────────
-_USERS: dict[str, dict] = {}
 
 
 def _hash_password(password: str) -> str:
@@ -55,7 +56,25 @@ def _create_access_token(data: dict, expires_delta: timedelta | None = None) -> 
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+def _user_to_dict(user: User) -> dict:
+    """Convert a DB user row into the dict shape consumed by existing routers."""
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "password_hash": user.password_hash,
+        "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+        "full_name": user.full_name,
+        "institution": user.institution,
+        "licence_number": user.licence_number,
+        "wallet_address": user.wallet_address,
+        "created_at": user.created_at.isoformat() if user.created_at else datetime.now(timezone.utc).isoformat(),
+    }
+
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     """Dependency: validate JWT and return the current user.
 
     Args:
@@ -81,14 +100,22 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     except JWTError:
         raise credentials_exception
 
-    user = _USERS.get(token_data.user_id)
+    try:
+        user_uuid = uuid.UUID(token_data.user_id)
+    except ValueError:
+        raise credentials_exception
+
+    user = await db.get(User, user_uuid)
     if user is None:
         raise credentials_exception
-    return user
+    return _user_to_dict(user)
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_in: UserCreate) -> UserResponse:
+async def register(
+    user_in: UserCreate,
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
     """Register a new patient or doctor account.
 
     Args:
@@ -100,30 +127,33 @@ async def register(user_in: UserCreate) -> UserResponse:
     Raises:
         HTTPException 409: If email is already registered.
     """
-    if any(u["email"] == user_in.email for u in _USERS.values()):
+    existing = await db.scalar(select(User).where(User.email == user_in.email))
+    if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",
         )
-    user_id = str(uuid.uuid4())
-    user = {
-        "id": user_id,
-        "email": user_in.email,
-        "password_hash": _hash_password(user_in.password),
-        "role": user_in.role,
-        "full_name": user_in.full_name,
-        "institution": user_in.institution,
-        "licence_number": user_in.licence_number,
-        "wallet_address": user_in.wallet_address,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    _USERS[user_id] = user
-    logger.info("New user registered: role=%s id=%s", user_in.role, user_id)
-    return UserResponse(**{k: v for k, v in user.items() if k != "password_hash"})
+    user = User(
+        email=user_in.email,
+        password_hash=_hash_password(user_in.password),
+        role=user_in.role.value,
+        full_name=user_in.full_name,
+        institution=user_in.institution,
+        licence_number=user_in.licence_number,
+        wallet_address=user_in.wallet_address,
+    )
+    db.add(user)
+    await db.flush()
+    await db.refresh(user)
+    logger.info("New user registered: role=%s id=%s", user_in.role, user.id)
+    return UserResponse(**{k: v for k, v in _user_to_dict(user).items() if k != "password_hash"})
 
 
 @router.post("/token", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Token:
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+) -> Token:
     """Authenticate user and return a JWT access token.
 
     Args:
@@ -135,15 +165,16 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> Token:
     Raises:
         HTTPException 401: If credentials are incorrect.
     """
-    user = next((u for u in _USERS.values() if u["email"] == form_data.username), None)
-    if not user or not _verify_password(form_data.password, user["password_hash"]):
+    user = await db.scalar(select(User).where(User.email == form_data.username))
+    if not user or not _verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = _create_access_token({"sub": user["id"], "role": user["role"]})
-    logger.info("User logged in: id=%s", user["id"])
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    token = _create_access_token({"sub": str(user.id), "role": role})
+    logger.info("User logged in: id=%s", user.id)
     return Token(access_token=token, token_type="bearer")
 
 
