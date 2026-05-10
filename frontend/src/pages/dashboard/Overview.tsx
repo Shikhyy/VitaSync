@@ -4,16 +4,14 @@ import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useCardTilt } from '../../hooks/useCardTilt'
 import { usePatientStore } from '../../stores/patientStore'
-import { mockPatientData } from '../../lib/api'
+import { listAlerts, listDocuments } from '../../lib/api'
+import { useAuthStore } from '../../stores/authStore'
 import './Dashboard.css'
-
-const TREND_ICON = { up: '↑', down: '↓', stable: '→' }
-const TREND_CLASS = { up: 'text-warning', down: 'text-success', stable: 'text-muted' }
 
 export default function DashboardOverview() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const { riskScores, setDocuments } = usePatientStore()
-  const { overview } = mockPatientData
+  const { user } = useAuthStore()
+  const { riskScores, documents, alerts, setDocuments, addAlert } = usePatientStore()
   
   useCardTilt()
 
@@ -35,8 +33,36 @@ export default function DashboardOverview() {
   }, { scope: containerRef })
 
   useEffect(() => {
-    setDocuments(mockPatientData.documents)
+    listDocuments().then((docs) => {
+      setDocuments(docs.map((doc) => ({
+        id: doc.task_id,
+        fileType: doc.filename?.split('.').pop()?.toLowerCase() || doc.file_type?.split('/').pop() || 'file',
+        documentType: doc.document_type || 'Medical Document',
+        sourceName: doc.filename || 'Uploaded file',
+        documentDate: doc.created_at.split('T')[0],
+        ingestionStatus: doc.status,
+        entityCount: doc.entity_count,
+        createdAt: doc.created_at,
+      })))
+    }).catch(() => undefined)
   }, [setDocuments])
+
+  useEffect(() => {
+    if (!user) return
+    listAlerts(user.id).then((items) => {
+      items.forEach((alert) => addAlert({
+        id: alert.id,
+        type: alert.type,
+        severity: alert.severity,
+        title: alert.title,
+        body: alert.body,
+        sourceLabName: alert.source_lab_name || undefined,
+        mlScore: alert.ml_score || undefined,
+        isRead: alert.is_read,
+        createdAt: alert.created_at,
+      }))
+    }).catch(() => undefined)
+  }, [addAlert, user])
 
   const riskItems = [
     { label: 'Diabetes Risk', value: riskScores.diabetes, color: riskScores.diabetes > 0.5 ? 'alert' : riskScores.diabetes > 0.3 ? 'borderline' : 'normal' },
@@ -44,7 +70,8 @@ export default function DashboardOverview() {
     { label: 'Kidney Disease Risk', value: riskScores.ckd, color: riskScores.ckd > 0.5 ? 'alert' : riskScores.ckd > 0.3 ? 'borderline' : 'normal' },
   ]
 
-  const unreadAlerts = mockPatientData.alerts.filter((a) => !a.isRead)
+  const unreadAlerts = alerts.filter((a) => !a.isRead)
+  const hasClinicalData = documents.length > 0
 
   return (
     <div className="dash-page" id="dashboard-overview" ref={containerRef}>
@@ -64,23 +91,19 @@ export default function DashboardOverview() {
       <div className="overview-grid">
         {/* Health Summary */}
         <div className="feat-card overview-summary">
-          <span className="eyebrow">Active Conditions</span>
+          <span className="eyebrow">Medical Brain Status</span>
           <div className="condition-list">
-            {overview.conditions.map((c) => (
-              <span key={c} className="badge">{c}</span>
-            ))}
+            <span className="badge">{documents.length} record{documents.length === 1 ? '' : 's'}</span>
+            <span className="badge">{documents.reduce((sum, d) => sum + d.entityCount, 0)} entities extracted</span>
           </div>
 
           <div className="divider" />
 
           <span className="eyebrow">Current Medications</span>
           <div className="medication-list">
-            {overview.medications.map((m) => (
-              <div key={m.name} className="medication-item">
-                <span className="med-name">{m.name}</span>
-                <span className="body-small">{m.dosage} · {m.frequency}</span>
-              </div>
-            ))}
+            <div className="no-alerts body-small">
+              Medication extraction appears here after prescription records are uploaded and processed.
+            </div>
           </div>
         </div>
 
@@ -88,7 +111,7 @@ export default function DashboardOverview() {
         <div className="feat-card overview-risk">
           <div className="risk-header">
             <span className="eyebrow">ML Risk Engine</span>
-            <span className="badge">XGBoost v2.0</span>
+            <span className="badge">{hasClinicalData ? 'Active' : 'Waiting for records'}</span>
           </div>
 
           <div className="risk-list">
@@ -114,7 +137,7 @@ export default function DashboardOverview() {
           </div>
 
           <p className="body-small risk-footnote">
-            Based on last 12 lab results. Updated every 10 minutes.
+            Risk scores are computed only from uploaded clinical records and mounted model artifacts.
           </p>
         </div>
 
@@ -122,20 +145,9 @@ export default function DashboardOverview() {
         <div className="feat-card overview-labs">
           <span className="eyebrow">Latest Lab Results</span>
           <div className="lab-list">
-            {overview.lastLabResults.map((lab) => (
-              <div key={lab.name} className="lab-item">
-                <div className="lab-name-row">
-                  <span className="lab-name">{lab.name}</span>
-                  <span className={`lab-trend ${TREND_CLASS[lab.trend as keyof typeof TREND_CLASS]}`}>
-                    {TREND_ICON[lab.trend as keyof typeof TREND_ICON]}
-                  </span>
-                </div>
-                <div className="lab-value-row">
-                  <span className="lab-value">{lab.value} <span className="lab-unit">{lab.unit}</span></span>
-                  <span className="body-small">{lab.date}</span>
-                </div>
-              </div>
-            ))}
+            <div className="no-alerts body-small">
+              Lab values will populate from uploaded clinical reports only.
+            </div>
           </div>
           <Link to="/dashboard/insights" className="btn-secondary" style={{ marginTop: 'auto' }} id="overview-view-trends-btn">
             View Trends →
