@@ -4,6 +4,8 @@ import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import './About.css'
 
+const GITHUB_REPO_URL = 'https://github.com/Shikhyy/VitaSync'
+
 export default function About() {
   const contentRef = useRef<HTMLElement>(null)
 
@@ -69,7 +71,7 @@ export default function About() {
               
               <div className="cta-actions" style={{ marginTop: 'var(--space-lg)' }}>
                 <Link to="/onboard/signup" className="btn-primary">Join the Platform</Link>
-                <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="btn-secondary">View Source Code</a>
+                <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="btn-secondary">View Source Code</a>
               </div>
             </div>
 
