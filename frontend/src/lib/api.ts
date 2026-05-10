@@ -1,82 +1,87 @@
-// Mock API client — replace base URL with real backend when available
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true' || false
+export class ApiError extends Error {
+  status: number
+  headers: Headers
+  detail: unknown
 
-// ── Mock data ────────────────────────────────────────────────
-export const mockPatientData = {
-  overview: {
-    conditions: ['Type 2 Diabetes Mellitus', 'Hypertension', 'Dyslipidaemia'],
-    medications: [
-      { name: 'Metformin', dosage: '500mg', frequency: 'twice daily' },
-      { name: 'Lisinopril', dosage: '10mg', frequency: 'once daily' },
-      { name: 'Atorvastatin', dosage: '20mg', frequency: 'once nightly' },
-    ],
-    lastLabResults: [
-      { name: 'HbA1c', value: 7.2, unit: '%', trend: 'up', date: '2024-03-14' },
-      { name: 'Creatinine', value: 0.9, unit: 'mg/dL', trend: 'stable', date: '2024-03-14' },
-      { name: 'LDL', value: 2.4, unit: 'mmol/L', trend: 'down', date: '2024-02-28' },
-    ],
-  },
-  riskScores: { diabetes: 0.34, cardiovascular: 0.18, ckd: 0.09 },
-  documents: [
-    { id: '1', fileType: 'pdf', documentType: 'Lab Report', sourceName: 'City Diagnostic Lab', documentDate: '2024-03-14', ingestionStatus: 'done' as const, entityCount: 23, createdAt: '2024-03-14T10:00:00Z' },
-    { id: '2', fileType: 'pdf', documentType: 'Discharge Summary', sourceName: 'Apollo Hospital', documentDate: '2023-11-20', ingestionStatus: 'done' as const, entityCount: 47, createdAt: '2023-11-20T15:30:00Z' },
-    { id: '3', fileType: 'jpeg', documentType: 'Prescription', sourceName: 'Dr. Sharma Clinic', documentDate: '2024-01-08', ingestionStatus: 'done' as const, entityCount: 12, createdAt: '2024-01-08T09:15:00Z' },
-    { id: '4', fileType: 'pdf', documentType: 'ECG Report', sourceName: 'Cardiology Centre', documentDate: '2023-09-05', ingestionStatus: 'done' as const, entityCount: 8, createdAt: '2023-09-05T14:00:00Z' },
-  ],
-  alerts: [
-    { id: 'a1', type: 'trend_change', severity: 'warning', title: 'HbA1c Trending Up', body: 'HbA1c has increased by 0.4% over the past 6 months. Current: 7.2%. Personal baseline: 6.8%. Consider reviewing diet and medication.', sourceLabName: 'HbA1c', mlScore: 0.71, isRead: false, createdAt: '2024-03-14T10:30:00Z' },
-    { id: 'a2', type: 'lab_anomaly', severity: 'info', title: 'Creatinine Within Normal Range', body: 'Latest creatinine 0.9 mg/dL — within normal range. Kidney function stable.', sourceLabName: 'Creatinine', mlScore: 0.12, isRead: true, createdAt: '2024-03-14T10:30:00Z' },
-  ],
-  labTrends: {
-    hba1c: {
-      labels: ['Sep 22', 'Jan 23', 'Jun 23', 'Oct 23', 'Mar 24'],
-      values: [6.5, 6.7, 6.9, 7.0, 7.2],
-    },
-    systolicBP: {
-      labels: ['Sep 22', 'Jan 23', 'Jun 23', 'Oct 23', 'Mar 24'],
-      values: [138, 135, 132, 130, 128],
-    },
-    ldl: {
-      labels: ['Sep 22', 'Jan 23', 'Jun 23', 'Oct 23', 'Mar 24'],
-      values: [3.2, 2.9, 2.6, 2.5, 2.4],
-    },
-  },
-  consent: {
-    pendingRequests: [
-      { id: 'r1', requesterName: 'Dr. Sarah Chen', institution: 'Metro General Hospital', specialty: 'Endocrinology', scope: 'Full history', requestedAt: '2024-03-15T08:00:00Z' },
-    ],
-    approved: [
-      { id: 'r2', requesterName: 'Dr. James Okafor', institution: 'City Cardiology Clinic', specialty: 'Cardiology', scope: 'Last 12 months', pricePerQuery: 0.01, expiresAt: '2024-09-01', queryCount: 14, earnings: 0.14 },
-    ],
-    totalEarnings: 0.47,
-    totalQueries: 47,
-  },
+  constructor(message: string, status: number, headers: Headers, detail: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.headers = headers
+    this.detail = detail
+  }
 }
 
-export const mockDoctorQueryResponse = {
-  answer: "No documented cardiac events found in the patient's records. One ECG performed on 5 September 2023 was reported as normal sinus rhythm with no ST-segment changes. A cardiology referral note from November 2023 notes no arrhythmia detected on 24-hour Holter monitoring. The patient's cardiovascular risk score is currently 18% (low-to-moderate) based on ML risk modelling of their lab history.",
-  sources: [
-    { title: 'ECG Report', date: '2023-09-05', source: 'Cardiology Centre', relevance: 0.94 },
-    { title: 'Cardiology Referral Note', date: '2023-11-20', source: 'Apollo Hospital', relevance: 0.87 },
-  ],
-  confidence: 0.91,
-  latencyMs: 2340,
-  mlContext: { cardiovascularRisk: 0.18, alertCount: 0 },
+export interface AuthUser {
+  id: string
+  email: string
+  full_name: string
+  role: 'patient' | 'doctor'
+  institution?: string | null
+  licence_number?: string | null
+  wallet_address?: string | null
+  created_at: string
+}
+
+export interface QueryResponse {
+  query_id: string
+  answer: string
+  sources: Array<{
+    title: string
+    date: string
+    source: string
+    relevance: number
+  }>
+  confidence: number
+  latency_ms: number
+  ml_context: Record<string, number>
+}
+
+export interface IngestDocument {
+  task_id: string
+  patient_id: string
+  filename?: string | null
+  file_type?: string | null
+  document_type?: string | null
+  status: 'pending' | 'processing' | 'done' | 'failed'
+  entity_count: number
+  created_at: string
+}
+
+export interface ConsentResponse {
+  id: string
+  patient_id: string
+  doctor_id: string
+  doctor_name?: string | null
+  institution?: string | null
+  scope: string
+  status: 'pending' | 'approved' | 'revoked'
+  price_per_query: number
+  query_count: number
+  expires_at?: string | null
+  created_at: string
+}
+
+export interface AlertResponse {
+  id: string
+  patient_id: string
+  type: 'lab_anomaly' | 'trend_change' | 'risk_increase' | 'drug_interaction'
+  severity: 'info' | 'warning' | 'critical'
+  title: string
+  body: string
+  source_lab_name?: string | null
+  ml_score?: number | null
+  is_read: boolean
+  created_at: string
 }
 
 // ── API functions ────────────────────────────────────────────
 async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
-  if (DEV_MODE) {
-    await new Promise((r) => setTimeout(r, 500 + Math.random() * 800))
-    throw new Error('DEV_MODE: use mock data directly')
-  }
-
-  // Get token from auth-storage (Zustand persist key)
   let token = ''
   try {
-    const authStorage = localStorage.getItem('auth-storage')
+    const authStorage = localStorage.getItem('vitasync-auth')
     if (authStorage) {
       const parsed = JSON.parse(authStorage)
       if (parsed.state && parsed.state.token) {
@@ -87,9 +92,9 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
     console.warn('Failed to parse auth token')
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options?.headers as Record<string, string>),
+  const headers: Record<string, string> = { ...(options?.headers as Record<string, string>) }
+  if (options?.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json'
   }
 
   if (token) {
@@ -103,13 +108,16 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     let detail = `API error ${res.status}`
+    let rawDetail: unknown = detail
     try {
       const errBody = await res.json()
-      if (errBody.detail) detail = errBody.detail
+      rawDetail = errBody.detail ?? errBody
+      if (typeof errBody.detail === 'string') detail = errBody.detail
+      if (errBody.detail?.message) detail = errBody.detail.message
     } catch {
       // ignore JSON parse error
     }
-    throw new Error(detail)
+    throw new ApiError(detail, res.status, res.headers, rawDetail)
   }
   
   // Return empty object for 204 No Content
@@ -118,4 +126,115 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
-export { apiRequest }
+async function registerUser(body: {
+  email: string
+  password: string
+  full_name: string
+  role: 'patient' | 'doctor'
+  institution?: string
+  licence_number?: string
+}) {
+  return apiRequest<AuthUser>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+async function loginUser(email: string, password: string) {
+  const form = new URLSearchParams()
+  form.set('username', email)
+  form.set('password', password)
+
+  return apiRequest<{ access_token: string; token_type: string }>('/auth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form,
+  })
+}
+
+async function getCurrentUser() {
+  return apiRequest<AuthUser>('/auth/me')
+}
+
+async function queryPatient(patientId: string, question: string) {
+  return apiRequest<QueryResponse>(`/query/${patientId}`, {
+    method: 'POST',
+    body: JSON.stringify({ question }),
+  })
+}
+
+async function listDocuments() {
+  return apiRequest<IngestDocument[]>('/ingest/documents')
+}
+
+async function uploadDocument(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return apiRequest<{ task_id: string; status: string; message: string }>('/ingest/upload', {
+    method: 'POST',
+    body: form,
+  })
+}
+
+async function listAlerts(patientId: string) {
+  return apiRequest<AlertResponse[]>(`/monitor/alerts/${patientId}`)
+}
+
+async function listConsents() {
+  return apiRequest<{ consents: ConsentResponse[] }>('/consent/my')
+}
+
+async function requestConsent(patientId: string, scope: string) {
+  return apiRequest<ConsentResponse>('/consent/request', {
+    method: 'POST',
+    body: JSON.stringify({ patient_id: patientId, scope }),
+  })
+}
+
+async function approveConsent(consentId: string, pricePerQuery: number, expiresAt: string) {
+  return apiRequest<ConsentResponse>(`/consent/${consentId}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ price_per_query: pricePerQuery, expires_at: expiresAt }),
+  })
+}
+
+async function revokeConsent(consentId: string) {
+  return apiRequest(`/consent/${consentId}`, { method: 'DELETE' })
+}
+
+async function checkDrugInteraction(newDrug: string, currentMedications: string[]) {
+  return apiRequest<{
+    new_drug: string
+    is_safe: boolean
+    highest_severity: string | null
+    interaction_count: number
+    interactions: Array<{
+      drug_a: string
+      drug_b: string
+      severity: string
+      mechanism: string
+      description: string
+      recommendation: string
+      evidence: string
+    }>
+  }>('/prescribe/drug-check', {
+    method: 'POST',
+    body: JSON.stringify({ new_drug: newDrug, current_medications: currentMedications }),
+  })
+}
+
+export {
+  apiRequest,
+  registerUser,
+  loginUser,
+  getCurrentUser,
+  queryPatient,
+  listDocuments,
+  uploadDocument,
+  listAlerts,
+  listConsents,
+  requestConsent,
+  approveConsent,
+  revokeConsent,
+  checkDrugInteraction,
+}
