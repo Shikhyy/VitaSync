@@ -1,10 +1,10 @@
-import { useCallback, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useDropzone } from 'react-dropzone'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useCardTilt } from '../../hooks/useCardTilt'
 import { usePatientStore } from '../../stores/patientStore'
-import { mockPatientData } from '../../lib/api'
+import { listDocuments, uploadDocument, type IngestDocument } from '../../lib/api'
 import './Dashboard.css'
 import './Records.css'
 
@@ -22,11 +22,9 @@ const DOC_TYPE_ICONS: Record<string, string> = {
 }
 
 export default function Records() {
-  const { documents, addDocument, updateDocumentStatus } = usePatientStore()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const displayDocs = documents.length > 0 ? documents : (mockPatientData.documents as any[])
-
+  const { documents, addDocument, setDocuments, updateDocumentStatus } = usePatientStore()
   const [uploading, setUploading] = useState<string[]>([])
+  const [error, setError] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
 
   useCardTilt()
@@ -47,9 +45,15 @@ export default function Records() {
       .to('.feat-card', { y: 0, opacity: 1, duration: 0.8, stagger: 0.1 }, 0.9)
   }, { scope: containerRef })
 
+  useEffect(() => {
+    listDocuments()
+      .then((docs) => setDocuments(docs.map(toStoreDocument)))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load documents'))
+  }, [setDocuments])
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     acceptedFiles.forEach(async (file) => {
-      const id = crypto.randomUUID()
+      const id = `upload-${file.name}-${Date.now()}`
       const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
       const newDoc = {
         id,
@@ -63,15 +67,21 @@ export default function Records() {
       }
       addDocument(newDoc)
       setUploading((u) => [...u, id])
+      setError('')
 
-      // Simulate ingestion pipeline
-      await new Promise((r) => setTimeout(r, 800))
-      updateDocumentStatus(id, 'processing')
-      await new Promise((r) => setTimeout(r, 2000 + Math.random() * 1500))
-      updateDocumentStatus(id, 'done', Math.floor(8 + Math.random() * 30))
-      setUploading((u) => u.filter((uid) => uid !== id))
+      try {
+        const result = await uploadDocument(file)
+        const docs = await listDocuments()
+        setDocuments(docs.map(toStoreDocument))
+        updateDocumentStatus(id, result.status === 'done' ? 'done' : 'processing')
+      } catch (err) {
+        updateDocumentStatus(id, 'failed')
+        setError(err instanceof Error ? err.message : 'Upload failed')
+      } finally {
+        setUploading((u) => u.filter((uid) => uid !== id))
+      }
     })
-  }, [addDocument, updateDocumentStatus])
+  }, [addDocument, setDocuments, updateDocumentStatus])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -106,6 +116,12 @@ export default function Records() {
           )}
         </div>
       </div>
+
+      {error && (
+        <div className="no-alerts" style={{ color: 'var(--color-danger)', borderColor: 'rgba(248,113,113,0.2)', background: 'rgba(248,113,113,0.05)' }}>
+          {error}
+        </div>
+      )}
 
       {/* Dropzone */}
       <div
@@ -142,13 +158,18 @@ export default function Records() {
         <div className="records-header">
           <span className="eyebrow">Document Timeline</span>
           <span className="body-small" style={{ color: 'var(--bd-muted)' }}>
-            {displayDocs.length} document{displayDocs.length !== 1 ? 's' : ''} ·{' '}
-            {displayDocs.reduce((sum, d) => sum + (d.entityCount || 0), 0)} entities extracted
+            {documents.length} document{documents.length !== 1 ? 's' : ''} ·{' '}
+            {documents.reduce((sum, d) => sum + (d.entityCount || 0), 0)} entities extracted
           </span>
         </div>
 
         <div className="records-list">
-          {displayDocs.map((doc) => (
+          {documents.length === 0 && (
+            <div className="no-alerts body-small">
+              No records uploaded yet. Add a PDF, image, CSV, or JSON file to build the medical brain from real data.
+            </div>
+          )}
+          {documents.map((doc) => (
             <div key={doc.id} className="record-item feat-card" id={`record-${doc.id}`}>
               <div className="record-icon" role="img" aria-label={doc.documentType}>
                 {DOC_TYPE_ICONS[doc.documentType] || '📄'}
@@ -184,4 +205,18 @@ export default function Records() {
       </div>
     </div>
   )
+}
+
+function toStoreDocument(doc: IngestDocument) {
+  const ext = doc.filename?.split('.').pop()?.toLowerCase() || doc.file_type?.split('/').pop() || 'file'
+  return {
+    id: doc.task_id,
+    fileType: ext,
+    documentType: doc.document_type || 'Medical Document',
+    sourceName: doc.filename || 'Uploaded file',
+    documentDate: doc.created_at.split('T')[0],
+    ingestionStatus: doc.status,
+    entityCount: doc.entity_count,
+    createdAt: doc.created_at,
+  }
 }
