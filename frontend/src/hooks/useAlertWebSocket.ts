@@ -2,6 +2,19 @@ import { useEffect } from 'react'
 import { usePatientStore } from '../stores/patientStore'
 import { useAuthStore } from '../stores/authStore'
 
+function buildWebSocketUrl(patientId: string) {
+  const configuredWsUrl = import.meta.env.VITE_WS_URL
+  if (configuredWsUrl) return `${configuredWsUrl.replace(/\/$/, '')}/monitor/ws/${patientId}`
+
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  if (apiUrl.startsWith('/')) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${protocol}//${window.location.host}${apiUrl}/monitor/ws/${patientId}`
+  }
+
+  return `${apiUrl.replace(/^http/, 'ws').replace(/\/$/, '')}/monitor/ws/${patientId}`
+}
+
 export function useAlertWebSocket() {
   const { user } = useAuthStore()
   const { addAlert } = usePatientStore()
@@ -9,9 +22,7 @@ export function useAlertWebSocket() {
   useEffect(() => {
     if (!user || user.role !== 'patient') return
 
-    // Connect to WebSocket using the patient ID
-    // In dev mode, we connect to the local FastAPI backend (assuming it runs on 8000)
-    const wsUrl = `ws://localhost:8000/monitor/ws/${user.id}`
+    const wsUrl = buildWebSocketUrl(user.id)
     let ws: WebSocket | null = null
     let reconnectTimer: number
 
