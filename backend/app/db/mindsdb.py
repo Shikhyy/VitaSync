@@ -16,7 +16,7 @@ class MindsDBClient:
     async def execute_query(self, query: str) -> list[dict]:
         """Execute a SQL/Cypher query against MindsDB."""
         if settings.dev_mode:
-            logger.info("[DEV MODE] MindsDB query bypassed: %s", query)
+            logger.info("MindsDB query skipped because local mode is enabled: %s", query)
             return []
             
         payload = {"query": query}
