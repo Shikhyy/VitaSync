@@ -4,6 +4,8 @@ import { useAuthStore } from '../stores/authStore'
 import { usePatientStore } from '../stores/patientStore'
 import './Nav.css'
 
+const GITHUB_REPO_URL = 'https://github.com/Shikhyy/VitaSync'
+
 export default function Nav() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -43,7 +45,7 @@ export default function Nav() {
               <a href="/#features" className="nav-link" role="listitem">Features</a>
               <a href="/#agents" className="nav-link" role="listitem">Agents</a>
               <Link to="/about" className="nav-link" role="listitem">About</Link>
-              <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="nav-link" role="listitem">GitHub</a>
+              <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="nav-link" role="listitem">GitHub</a>
             </>
           ) : (
             <>
@@ -93,6 +95,7 @@ export default function Nav() {
           <a href="/#features" className="nav-mobile-link">Features</a>
           <a href="/#agents" className="nav-mobile-link">Agents</a>
           <Link to="/about" className="nav-mobile-link">About</Link>
+          <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="nav-mobile-link">GitHub</a>
           {isAuthenticated ? (
             <button className="nav-mobile-link" onClick={handleLogout}>Sign Out</button>
           ) : (
