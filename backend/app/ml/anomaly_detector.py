@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -16,7 +17,7 @@ class AnomalyDetector:
     Classifies individual lab results as normal or anomalous.
     Trained on MIMIC-III extracted lab time-series.
 
-    In dev mode: returns rule-based mock scores.
+    In dev mode: returns rule-based scores.
     In production: loads pre-trained XGBoost model from /models/lab_anomaly_xgb.json.
     """
 
@@ -43,14 +44,22 @@ class AnomalyDetector:
         Expected path: /models/lab_anomaly_xgb.json
         Train script: backend/scripts/train_anomaly_detector.py
         """
+        model_path = Path("/models/lab_anomaly_xgb.json")
+        if not model_path.exists():
+            logger.warning(
+                "Anomaly model %s is missing; using rule-based fallback scoring",
+                model_path,
+            )
+            return
+
         try:
             import xgboost as xgb
             self._model = xgb.XGBClassifier()
-            self._model.load_model("/models/lab_anomaly_xgb.json")
+            self._model.load_model(model_path)
             logger.info("Anomaly detector model loaded")
         except Exception as e:
-            logger.error("Failed to load anomaly model: %s", e)
-            raise
+            logger.warning("Failed to load anomaly model; using fallback scoring: %s", e)
+            self._model = None
 
     def score(
         self,
