@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { mockDoctorQueryResponse } from '../../lib/api'
+import { ApiError, queryPatient, type QueryResponse } from '../../lib/api'
 import './Doctor.css'
 
-const SAMPLE_QUESTIONS = [
+const SUGGESTED_QUESTIONS = [
   'Does this patient have any history of cardiac events?',
   'What medications is the patient currently taking?',
   'What are the trends in HbA1c over the past 2 years?',
@@ -12,20 +12,30 @@ const SAMPLE_QUESTIONS = [
 ]
 
 export default function PatientQuery() {
-  useParams()
+  const { id: patientId = '' } = useParams()
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
-  const [response, setResponse] = useState<typeof mockDoctorQueryResponse | null>(null)
+  const [response, setResponse] = useState<QueryResponse | null>(null)
+  const [error, setError] = useState('')
+  const [paymentRequired, setPaymentRequired] = useState('')
 
   const handleSubmit = async (question: string) => {
     if (!question.trim()) return
     setLoading(true)
     setResponse(null)
-    // Simulate API call
-    await new Promise((r) => setTimeout(r, 1800 + Math.random() * 800))
-    const res = { ...mockDoctorQueryResponse }
-    setResponse(res)
-    setLoading(false)
+    setError('')
+    setPaymentRequired('')
+    try {
+      const res = await queryPatient(patientId, question)
+      setResponse(res)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 402) {
+        setPaymentRequired(err.headers.get('PAYMENT-REQUIRED') || err.headers.get('X-PAYMENT-REQUIRED') || '')
+      }
+      setError(err instanceof Error ? err.message : 'Query failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -33,7 +43,7 @@ export default function PatientQuery() {
       {/* Unified Header */}
       <header className="doctor-header">
         <div className="header-titles">
-          <span className="eyebrow">Clinician Overview · Patient VS-4729-A</span>
+          <span className="eyebrow">Clinician Overview · Patient {patientId.slice(0, 8) || 'record'}</span>
           <h1 className="display-section">ASK THE <span className="italic-accent">brain.</span></h1>
           <p className="body-small" style={{ color: 'var(--bd-muted)', marginTop: 4 }}>
             Qwen 72B · PubMedBERT RAG · X402 gated
@@ -75,13 +85,13 @@ export default function PatientQuery() {
             </div>
           </div>
 
-          <div className="sample-questions" style={{ marginTop: 'var(--space-xl)' }}>
+          <div className="suggested-questions" style={{ marginTop: 'var(--space-xl)' }}>
             <span className="eyebrow" style={{ fontSize: 10, display: 'block', marginBottom: 12 }}>Suggested Queries</span>
-            <div className="sample-list" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {SAMPLE_QUESTIONS.map((q) => (
+            <div className="suggested-list" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {SUGGESTED_QUESTIONS.map((q) => (
                 <button
                   key={q}
-                  className="sample-question"
+                  className="suggested-question"
                   onClick={() => { setQuery(q); handleSubmit(q) }}
                   style={{ 
                     background: 'rgba(255,255,255,0.02)', 
@@ -149,7 +159,25 @@ export default function PatientQuery() {
             </div>
           )}
 
-          {!response && !loading && (
+          {error && !loading && (
+            <div className="aside-widget" style={{ borderColor: 'var(--color-warning)', background: 'rgba(251,191,36,0.05)' }}>
+              <span className="eyebrow">Query blocked</span>
+              <p className="body-small" style={{ marginTop: 12, color: 'var(--bd-cream-60)', lineHeight: 1.7 }}>
+                {error}
+              </p>
+              {paymentRequired && (
+                <div className="response-disclaimer body-small" style={{ marginTop: 16, wordBreak: 'break-all' }}>
+                  x402 requirement received. A wallet client should sign this payment requirement and retry with
+                  {' '}<strong>PAYMENT-SIGNATURE</strong>: {paymentRequired.slice(0, 180)}...
+                </div>
+              )}
+              <p className="body-small" style={{ marginTop: 12, color: 'var(--bd-muted)' }}>
+                Use a real patient account ID with approved consent before invoking Qwen.
+              </p>
+            </div>
+          )}
+
+          {!response && !loading && !error && (
             <div className="aside-widget" style={{ minHeight: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', opacity: 0.5 }}>
               <span style={{ fontSize: 40, marginBottom: 16 }}>🧠</span>
               <p className="body-small">Enter a clinical question to query<br />this patient's medical history.</p>
