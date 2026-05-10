@@ -12,15 +12,7 @@ logger = logging.getLogger(__name__)
 anomaly_detector = AnomalyDetector()
 risk_predictor = RiskPredictor()
 
-# Mock patient lab data for dev mode — replace with DB queries in production
-_MOCK_PATIENT_LABS: dict[str, dict] = {
-    "default": {
-        "hba1c": [6.5, 6.7, 6.9, 7.0, 7.2],
-        "creatinine": [0.8, 0.85, 0.9, 0.9, 0.9],
-        "ldl": [3.2, 2.9, 2.6, 2.5, 2.4],
-        "systolic_bp": [138, 135, 132, 130, 128],
-    }
-}
+_PATIENT_LABS: dict[str, dict] = {}
 
 
 @celery_app.task(name="app.tasks.monitor_task.run_monitoring_cycle")
@@ -42,8 +34,7 @@ def run_monitoring_cycle() -> dict:
     logger.info("Monitoring cycle started")
     results = {"patients_checked": 0, "alerts_generated": 0}
 
-    # In production: query DB for all active patients
-    patient_ids = ["mock-patient-001"]
+    patient_ids = list(_PATIENT_LABS)
 
     for patient_id in patient_ids:
         try:
@@ -69,7 +60,7 @@ def _check_patient(patient_id: str) -> dict:
     Returns:
         Dict with alert count and risk scores.
     """
-    labs = _MOCK_PATIENT_LABS.get(patient_id, _MOCK_PATIENT_LABS["default"])
+    labs = _PATIENT_LABS.get(patient_id, {})
     alerts_fired = 0
     high_anomalies = []
 
