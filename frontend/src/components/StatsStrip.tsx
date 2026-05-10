@@ -1,4 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
+import gsap from 'gsap'
+import { useGSAP } from '@gsap/react'
 import './StatsStrip.css'
 
 interface Stat {
@@ -16,29 +18,49 @@ const STATS: Stat[] = [
 ]
 
 export default function StatsStrip() {
-  const ref = useRef<HTMLDivElement>(null)
-  const animated = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !animated.current) {
-          animated.current = true
-          animateCounters(el)
+  useGSAP(() => {
+    // Staggered entry for items
+    gsap.from('.stat-item', {
+      y: 30,
+      opacity: 0,
+      stagger: 0.1,
+      duration: 0.8,
+      ease: 'power3.out',
+      scrollTrigger: {
+        trigger: containerRef.current,
+        start: 'top 90%',
+      }
+    })
+
+    // Count-up animation
+    const counters = gsap.utils.toArray<HTMLElement>('.stat-number')
+    counters.forEach((counter) => {
+      const target = parseFloat(counter.dataset.target || '0')
+      const decimal = parseInt(counter.dataset.decimal || '0')
+      const suffix = counter.dataset.suffix || ''
+      
+      const obj = { val: 0 }
+      gsap.to(obj, {
+        val: target,
+        duration: 1.5,
+        ease: 'power2.out',
+        scrollTrigger: {
+          trigger: containerRef.current,
+          start: 'top 85%',
+        },
+        onUpdate: () => {
+          counter.textContent = `${decimal ? obj.val.toFixed(1) : Math.round(obj.val)}${suffix}`
         }
-      },
-      { threshold: 0.3 }
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
+      })
+    })
+  }, { scope: containerRef })
 
   return (
-    <div className="stats-strip" ref={ref} id="stats-strip">
-      {STATS.map((stat, i) => (
-        <div className="stat-item" key={stat.label} style={{ animationDelay: `${i * 0.1}s` }}>
+    <div className="stats-strip" ref={containerRef} id="stats-strip">
+      {STATS.map((stat) => (
+        <div className="stat-item" key={stat.label}>
           <div className="stat-value">
             <span
               className="stat-number"
@@ -46,7 +68,7 @@ export default function StatsStrip() {
               data-suffix={stat.suffix}
               data-decimal={stat.value % 1 !== 0 ? '1' : '0'}
             >
-              {stat.value}{stat.suffix}
+              0{stat.suffix}
             </span>
           </div>
           <div className="stat-label">{stat.label}</div>
@@ -55,23 +77,4 @@ export default function StatsStrip() {
       ))}
     </div>
   )
-}
-
-function animateCounters(container: HTMLElement) {
-  container.querySelectorAll<HTMLElement>('.stat-number').forEach((el) => {
-    const target = parseFloat(el.dataset.target || '0')
-    const suffix = el.dataset.suffix || ''
-    const decimal = parseInt(el.dataset.decimal || '0')
-    const duration = 1500
-    const start = performance.now()
-
-    const tick = (now: number) => {
-      const progress = Math.min((now - start) / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 4)
-      const current = target * eased
-      el.textContent = `${decimal ? current.toFixed(1) : Math.round(current)}${suffix}`
-      if (progress < 1) requestAnimationFrame(tick)
-    }
-    requestAnimationFrame(tick)
-  })
 }
