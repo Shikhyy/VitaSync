@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.db.session import create_tables
 from app.routers import auth, ingest, query, consent, monitor, health, prescribe, communication, consultation
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ ALLOWED_ORIGINS: list[str] = [o.strip() for o in _raw_origins.split(",") if o.st
 async def lifespan(app: FastAPI):
     """Load ML models once at startup."""
     logger.info("VitaSync API starting — loading ML models")
+    await create_tables()
     # Models are loaded lazily via their singleton classes.
     # In production on AMD MI300X: vLLM server must be running first.
     yield
@@ -46,6 +48,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["PAYMENT-REQUIRED", "X-PAYMENT-REQUIRED", "PAYMENT-RESPONSE", "X-PAYMENT-RESPONSE"],
 )
 
 # ── Routers ──────────────────────────────────────────────────────
