@@ -2,18 +2,22 @@ from __future__ import annotations
 
 import logging
 import uuid
+from io import BytesIO
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import get_db
+from app.ml.ner_pipeline import MedicalNERPipeline
+from app.models.models import Document, DocumentChunk, IngestionStatusEnum, MedicalEntity
 from app.routers.auth import get_current_user
 from app.schemas.ingest import IngestResponse, IngestStatusResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# In-memory task store (replace with Celery task tracking in production)
-_TASKS: dict[str, dict] = {}
+ner_pipeline = MedicalNERPipeline()
 
 ALLOWED_MIME_TYPES = {
     "application/pdf",
@@ -31,6 +35,7 @@ MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 async def upload_document(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> IngestResponse:
     """Upload a medical document for ingestion.
 
@@ -67,30 +72,76 @@ async def upload_document(
     task_id = str(uuid.uuid4())
     patient_id = current_user["id"]
 
-    # Store task metadata (in production, dispatch to Celery here)
-    _TASKS[task_id] = {
-        "task_id": task_id,
-        "patient_id": patient_id,
-        "filename": file.filename,
-        "file_type": file.content_type,
-        "status": "pending",
-        "entity_count": 0,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
+    # Process immediately so the user sees real extraction status instead of simulated progress.
+    text = _extract_text(content, file.content_type or "", file.filename or "")
+    ner_result = ner_pipeline.extract(text, task_id)
+    document_type = _infer_document_type(file.filename or "", text)
 
-    # In production: process_document.apply_async(args=[task_id, patient_id, content])
+    document = Document(
+        patient_id=uuid.UUID(patient_id),
+        filename=file.filename or "uploaded-document",
+        file_type=file.content_type,
+        document_type=document_type,
+        source_name="Uploaded by Patient",
+        ingestion_status=IngestionStatusEnum.done,
+        entity_count=ner_result.entity_count,
+        raw_text_preview=text[:500],
+        celery_task_id=task_id,
+        processed_at=datetime.now(timezone.utc),
+    )
+    db.add(document)
+    await db.flush()
+
+    for entity in ner_result.entities:
+        db.add(MedicalEntity(
+            document_id=document.id,
+            patient_id=document.patient_id,
+            entity_type=entity.entity_type,
+            text=entity.text,
+            normalised_code=entity.normalised_code,
+            numeric_value=entity.numeric_value,
+            unit=entity.unit,
+            confidence=entity.confidence,
+        ))
+
+    for idx, chunk in enumerate(_chunk_text(text)):
+        db.add(DocumentChunk(
+            patient_id=document.patient_id,
+            document_id=document.id,
+            chunk_text=chunk,
+            chunk_index=idx,
+            entity_types=sorted({entity.entity_type for entity in ner_result.entities}),
+        ))
+
+    await db.flush()
+
     logger.info(
-        "Document upload queued: task_id=%s patient_id=%s filename=%s",
-        task_id, patient_id, file.filename,
+        "Document ingested: task_id=%s patient_id=%s filename=%s entities=%d",
+        task_id, patient_id, file.filename, ner_result.entity_count,
     )
 
-    return IngestResponse(task_id=task_id, status="pending", message="Document queued for ingestion")
+    return IngestResponse(task_id=task_id, status="done", message="Document ingested")
+
+
+@router.get("/documents", response_model=list[IngestStatusResponse])
+async def list_documents(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[IngestStatusResponse]:
+    """List documents uploaded by the current patient."""
+    result = await db.scalars(
+        select(Document)
+        .where(Document.patient_id == uuid.UUID(current_user["id"]))
+        .order_by(Document.created_at.desc())
+    )
+    return [_document_response(document) for document in result.all()]
 
 
 @router.get("/status/{task_id}", response_model=IngestStatusResponse)
 async def get_ingestion_status(
     task_id: str,
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> IngestStatusResponse:
     """Get the current status of a document ingestion task.
 
@@ -105,15 +156,86 @@ async def get_ingestion_status(
         HTTPException 404: If task not found.
         HTTPException 403: If task belongs to a different patient.
     """
-    task = _TASKS.get(task_id)
-    if not task:
+    document = await db.scalar(select(Document).where(Document.celery_task_id == task_id))
+    if not document:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task {task_id} not found",
         )
-    if task["patient_id"] != current_user["id"]:
+    if str(document.patient_id) != current_user["id"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied",
         )
-    return IngestStatusResponse(**task)
+    return _document_response(document)
+
+
+def _document_response(document: Document) -> IngestStatusResponse:
+    status_value = document.ingestion_status.value if hasattr(document.ingestion_status, "value") else str(document.ingestion_status)
+    created_at = document.created_at.isoformat() if document.created_at else datetime.now(timezone.utc).isoformat()
+    return IngestStatusResponse(
+        task_id=document.celery_task_id or str(document.id),
+        patient_id=str(document.patient_id),
+        filename=document.filename,
+        file_type=document.file_type,
+        document_type=document.document_type,
+        status=status_value,
+        entity_count=document.entity_count or 0,
+        created_at=created_at,
+    )
+
+
+def _chunk_text(text: str, chunk_size: int = 1200, overlap: int = 150) -> list[str]:
+    """Split extracted text into persisted chunks for grounded Qwen retrieval."""
+    cleaned = " ".join(text.split())
+    if not cleaned:
+        return []
+
+    chunks: list[str] = []
+    start = 0
+    while start < len(cleaned):
+        end = min(len(cleaned), start + chunk_size)
+        chunks.append(cleaned[start:end])
+        if end == len(cleaned):
+            break
+        start = max(0, end - overlap)
+    return chunks
+
+
+def _extract_text(content: bytes, content_type: str, filename: str) -> str:
+    """Extract real text from supported upload types."""
+    try:
+        if content_type == "application/pdf" or filename.lower().endswith(".pdf"):
+            import fitz
+
+            with fitz.open(stream=content, filetype="pdf") as doc:
+                return "\n".join(page.get_text() for page in doc).strip()
+
+        if content_type in {"image/jpeg", "image/png"}:
+            from PIL import Image
+            import pytesseract
+
+            image = Image.open(BytesIO(content))
+            return pytesseract.image_to_string(image).strip()
+
+        if content_type in {"text/csv", "application/json"} or filename.lower().endswith((".csv", ".json", ".txt")):
+            return content.decode("utf-8", errors="replace").strip()
+    except Exception as e:
+        logger.warning("Text extraction failed for %s: %s", filename, e)
+
+    return content[:5000].decode("utf-8", errors="replace").strip()
+
+
+def _infer_document_type(filename: str, text: str) -> str:
+    lower = f"{filename} {text[:1000]}".lower()
+    if "prescription" in lower or "rx" in lower:
+        return "Prescription"
+    if "ecg" in lower or "electrocardiogram" in lower:
+        return "ECG Report"
+    if "discharge" in lower:
+        return "Discharge Summary"
+    if "lab" in lower or "hba1c" in lower or "creatinine" in lower or "ldl" in lower:
+        return "Lab Report"
+    if "consult" in lower or "assessment" in lower:
+        return "Consultation Note"
+    return "Medical Document"
