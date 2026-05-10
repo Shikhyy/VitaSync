@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     # Monitoring
     alert_threshold: float = 0.65  # ML score above which LLM is invoked
 
+    # x402 payment rail for paid Qwen queries
+    x402_enabled: bool = False
+    x402_pay_to: str = ""
+    x402_facilitator_url: str = ""
+    x402_network: str = "eip155:8453"  # Base mainnet
+    x402_asset: str = "USDC"
+    x402_asset_address: str = ""
+    x402_scheme: str = "exact"
+    x402_timeout_seconds: float = 10.0
+    x402_allow_unverified_payments: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
 
