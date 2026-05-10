@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class MedicalSemanticSearch:
     """RAG Semantic Search using PubMedBERT and pgvector.
 
-    In dev mode: performs simple keyword search over mock data.
+    In dev mode: returns no persisted records unless a vector store is configured.
     In production: uses sentence-transformers to encode queries and
     queries the document_chunks pgvector table.
     """
@@ -48,30 +48,47 @@ class MedicalSemanticSearch:
             List of dictionaries with 'text', 'document_id', and 'similarity'.
         """
         if settings.dev_mode or self._embedder is None:
-            return await self._mock_search(query)
-        return await self._vector_search(patient_id, query, top_k)
+            return await self._keyword_search(patient_id, query, top_k)
+        try:
+            return await self._vector_search(patient_id, query, top_k)
+        except Exception as e:
+            logger.warning("Vector search unavailable; using persisted keyword search: %s", e)
+            return await self._keyword_search(patient_id, query, top_k)
 
-    async def _mock_search(self, query: str) -> list[dict]:
-        """Return hardcoded mock results for local development."""
-        query_lower = query.lower()
-        if "diabetes" in query_lower or "hba1c" in query_lower:
-            return [{
-                "text": "Patient diagnosed with Type 2 Diabetes Mellitus in 2021. Latest HbA1c is 7.2%. Prescribed Metformin 500mg BD.",
-                "document_id": "doc-001",
-                "similarity": 0.92
-            }]
-        elif "blood pressure" in query_lower or "bp" in query_lower:
-            return [{
-                "text": "History of hypertension, well controlled. Average BP is 128/82. On Lisinopril 10mg OD.",
-                "document_id": "doc-002",
-                "similarity": 0.88
-            }]
-        else:
-            return [{
-                "text": "General health check unremarkable. No active complaints.",
-                "document_id": "doc-003",
-                "similarity": 0.45
-            }]
+    async def _keyword_search(self, patient_id: str, query: str, top_k: int) -> list[dict]:
+        """Return grounded chunks from persisted uploads without synthetic fallback data."""
+        import re
+        import uuid
+
+        from sqlalchemy import select
+
+        from app.db.session import AsyncSessionLocal
+        from app.models.models import DocumentChunk
+
+        terms = [term.lower() for term in re.findall(r"[a-zA-Z0-9]{3,}", query)][:12]
+        async with AsyncSessionLocal() as session:
+            result = await session.scalars(
+                select(DocumentChunk)
+                .where(DocumentChunk.patient_id == uuid.UUID(patient_id))
+                .order_by(DocumentChunk.created_at.desc())
+                .limit(50)
+            )
+            chunks = result.all()
+
+        ranked: list[dict] = []
+        for chunk in chunks:
+            text_lower = chunk.chunk_text.lower()
+            hits = sum(1 for term in terms if term in text_lower)
+            similarity = hits / max(len(terms), 1)
+            if similarity > 0 or not terms:
+                ranked.append({
+                    "text": chunk.chunk_text,
+                    "document_id": str(chunk.document_id),
+                    "similarity": max(similarity, 0.05),
+                })
+
+        ranked.sort(key=lambda item: item["similarity"], reverse=True)
+        return ranked[:top_k]
 
     async def _vector_search(self, patient_id: str, query: str, top_k: int) -> list[dict]:
         """Execute pgvector similarity search against the database."""
