@@ -1,16 +1,16 @@
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useCardTilt } from '../../hooks/useCardTilt'
-import { mockPatientData } from '../../lib/api'
+import { approveConsent, listConsents, revokeConsent, type ConsentResponse } from '../../lib/api'
 import './Dashboard.css'
 import './Consent.css'
 
 export default function Consent() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const { consent } = mockPatientData
-  const [approved, setApproved] = useState(consent.approved)
-  const [pending, setPending] = useState(consent.pendingRequests)
+  const [consents, setConsents] = useState<ConsentResponse[]>([])
+  const [error, setError] = useState('')
+  const [terms, setTerms] = useState<Record<string, { price: string; expiresAt: string }>>({})
 
   const [defaultDate] = useState(() => new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
 
@@ -28,24 +28,50 @@ export default function Consent() {
       .to('.feat-card', { y: 0, opacity: 1, duration: 0.8, stagger: 0.1 }, 0.6)
   }, { scope: containerRef })
 
-  const handleApprove = (id: string) => {
-    const req = pending.find((r) => r.id === id)!
-    setPending((p) => p.filter((r) => r.id !== id))
-    setApproved((a) => [...a, {
-      id,
-      requesterName: req.requesterName,
-      institution: req.institution,
-      specialty: req.specialty,
-      scope: req.scope,
-      pricePerQuery: 0.01,
-      expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      queryCount: 0,
-      earnings: 0,
-    }])
+  const refresh = () => {
+    listConsents()
+      .then((data) => setConsents(data.consents))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load consent records'))
   }
 
-  const handleRevoke = (id: string) => {
-    setApproved((a) => a.filter((r) => r.id !== id))
+  useEffect(refresh, [])
+
+  const pending = consents.filter((c) => c.status === 'pending')
+  const approved = consents.filter((c) => c.status === 'approved')
+  const totalQueries = approved.reduce((sum, c) => sum + c.query_count, 0)
+  const totalEarnings = approved.reduce((sum, c) => sum + c.query_count * c.price_per_query, 0)
+  const activeRevenue = approved.reduce((sum, c) => sum + c.price_per_query, 0)
+
+  const updateTerm = (id: string, patch: Partial<{ price: string; expiresAt: string }>) => {
+    setTerms((current) => ({
+      ...current,
+      [id]: {
+        price: current[id]?.price ?? '0.01',
+        expiresAt: current[id]?.expiresAt ?? defaultDate,
+        ...patch,
+      },
+    }))
+  }
+
+  const handleApprove = async (id: string) => {
+    setError('')
+    try {
+      const term = terms[id] ?? { price: '0.01', expiresAt: defaultDate }
+      await approveConsent(id, Number(term.price), term.expiresAt)
+      refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not approve consent')
+    }
+  }
+
+  const handleRevoke = async (id: string) => {
+    setError('')
+    try {
+      await revokeConsent(id)
+      refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke consent')
+    }
   }
 
   return (
@@ -58,13 +84,38 @@ export default function Consent() {
           </h1>
         </div>
         <div className="consent-earnings feat-card">
-          <span className="eyebrow">Monthly Earnings</span>
+          <div className="payment-orbit" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <span className="eyebrow">x402 Query Rail</span>
           <span className="earnings-value">
-            ${consent.totalEarnings.toFixed(2)}
+            ${totalEarnings.toFixed(2)}
           </span>
-          <span className="body-small">{consent.totalQueries} queries · X402 micropayments</span>
+          <span className="body-small">{totalQueries} settled queries · ${activeRevenue.toFixed(2)} active rate</span>
         </div>
       </div>
+
+      <div className="x402-banner feat-card">
+        <div>
+          <span className="eyebrow">Payment Policy</span>
+          <h2 className="display-card">CONSENT IS THE <span className="italic-accent">meter.</span></h2>
+        </div>
+        <p className="body-small">
+          Each approved record sets a price-per-query. When x402 enforcement is enabled on the API,
+          paid Qwen calls require a valid payment signature before the medical brain responds.
+        </p>
+        <div className="rail-line" aria-hidden="true">
+          <span />
+        </div>
+      </div>
+
+      {error && (
+        <div className="no-alerts" style={{ color: 'var(--color-danger)', borderColor: 'rgba(248,113,113,0.2)', background: 'rgba(248,113,113,0.05)' }}>
+          {error}
+        </div>
+      )}
 
       {/* Pending requests */}
       {pending.length > 0 && (
@@ -79,11 +130,11 @@ export default function Consent() {
                 <div className="consent-card-header">
                   <div className="consent-doctor-info">
                     <div className="consent-avatar">
-                      {req.requesterName.charAt(0)}
+                      {(req.doctor_name || req.doctor_id).charAt(0)}
                     </div>
                     <div>
-                      <div className="consent-name">{req.requesterName}</div>
-                      <div className="body-small">{req.institution} · {req.specialty}</div>
+                      <div className="consent-name">{req.doctor_name || req.doctor_id}</div>
+                      <div className="body-small">{req.institution || 'Institution not provided'}</div>
                     </div>
                   </div>
                   <span className="badge badge-warning">Pending</span>
@@ -96,18 +147,30 @@ export default function Consent() {
                   </div>
                   <div className="consent-detail-item">
                     <span className="input-label">Requested</span>
-                    <span className="body-small">{new Date(req.requestedAt).toLocaleDateString()}</span>
+                    <span className="body-small">{new Date(req.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
 
                 <div className="consent-price-row">
                   <div className="form-group" style={{ flex: 1 }}>
                     <label className="input-label">Price per Query (USD)</label>
-                    <input type="number" className="input" defaultValue="0.01" step="0.01" min="0" />
+                    <input
+                      type="number"
+                      className="input"
+                      value={terms[req.id]?.price ?? '0.01'}
+                      step="0.01"
+                      min="0"
+                      onChange={(e) => updateTerm(req.id, { price: e.target.value })}
+                    />
                   </div>
                   <div className="form-group" style={{ flex: 1 }}>
                     <label className="input-label">Access Expires</label>
-                    <input type="date" className="input" defaultValue={defaultDate} />
+                    <input
+                      type="date"
+                      className="input"
+                      value={terms[req.id]?.expiresAt ?? defaultDate}
+                      onChange={(e) => updateTerm(req.id, { expiresAt: e.target.value })}
+                    />
                   </div>
                 </div>
 
@@ -121,7 +184,7 @@ export default function Consent() {
                   </button>
                   <button
                     className="btn-secondary"
-                    onClick={() => setPending((p) => p.filter((r) => r.id !== req.id))}
+                    onClick={() => handleRevoke(req.id)}
                     id={`consent-deny-${req.id}`}
                   >
                     Deny
@@ -152,31 +215,37 @@ export default function Consent() {
               <div key={req.id} className="consent-card feat-card" id={`consent-approved-${req.id}`}>
                 <div className="consent-card-header">
                   <div className="consent-doctor-info">
-                    <div className="consent-avatar">{req.requesterName.charAt(0)}</div>
+                    <div className="consent-avatar">{(req.doctor_name || req.doctor_id).charAt(0)}</div>
                     <div>
-                      <div className="consent-name">{req.requesterName}</div>
+                      <div className="consent-name">{req.doctor_name || req.doctor_id}</div>
                       <div className="body-small">{req.institution}</div>
                     </div>
                   </div>
                   <span className="badge badge-success">Active</span>
                 </div>
 
+                <div className="x402-mini-rail" aria-label="x402 payment rail status">
+                  <span className="live-dot" />
+                  <span>402 payment required on paid Qwen query</span>
+                  <strong>${req.price_per_query.toFixed(2)}</strong>
+                </div>
+
                 <div className="consent-stats">
                   <div className="consent-stat">
                     <span className="eyebrow" style={{ fontSize: 9 }}>Queries</span>
-                    <span className="consent-stat-value">{req.queryCount}</span>
+                    <span className="consent-stat-value">{req.query_count}</span>
                   </div>
                   <div className="consent-stat">
                     <span className="eyebrow" style={{ fontSize: 9 }}>Earned</span>
-                    <span className="consent-stat-value text-success">${req.earnings.toFixed(2)}</span>
+                    <span className="consent-stat-value text-success">${(req.query_count * req.price_per_query).toFixed(2)}</span>
                   </div>
                   <div className="consent-stat">
                     <span className="eyebrow" style={{ fontSize: 9 }}>Price/Query</span>
-                    <span className="consent-stat-value">${req.pricePerQuery.toFixed(2)}</span>
+                    <span className="consent-stat-value">${req.price_per_query.toFixed(2)}</span>
                   </div>
                   <div className="consent-stat">
                     <span className="eyebrow" style={{ fontSize: 9 }}>Expires</span>
-                    <span className="consent-stat-value">{req.expiresAt}</span>
+                    <span className="consent-stat-value">{req.expires_at || 'No expiry'}</span>
                   </div>
                 </div>
 
