@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -106,7 +107,7 @@ class MedicalNERPipeline:
 
     def __init__(self) -> None:
         self._model = None
-        if not settings.dev_mode:
+        if not settings.dev_mode and os.getenv("ENABLE_BIOBERT", "false").lower() == "true":
             self._load_model()
 
     def _load_model(self) -> None:
