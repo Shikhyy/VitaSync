@@ -3,12 +3,15 @@ import { Link } from 'react-router-dom'
 import HeroSection from '../components/HeroSection'
 import StatsStrip from '../components/StatsStrip'
 import AgentFlow from '../components/AgentFlow'
+import BackgroundCanvas from '../components/BackgroundCanvas'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useGSAP } from '@gsap/react'
 import './Landing.css'
 
 gsap.registerPlugin(ScrollTrigger)
+
+const GITHUB_REPO_URL = 'https://github.com/Shikhyy/VitaSync'
 
 const FEATURES = [
   {
@@ -73,33 +76,89 @@ export default function Landing() {
   const mainRef = useRef<HTMLElement>(null)
 
   useGSAP(() => {
-    // Reveal animations for all .reveal elements
-    gsap.utils.toArray('.reveal').forEach((el: any) => {
-      gsap.fromTo(el,
-        { y: 15, opacity: 0 },
-        {
-          y: 0,
-          opacity: 1,
-          duration: 0.5,
-          ease: 'power2.out',
-          scrollTrigger: {
-            trigger: el,
-            start: 'top 85%',
-          }
+    // 1. General Reveal for Headers
+    gsap.utils.toArray('.section-header').forEach((header: any) => {
+      gsap.from(header, {
+        y: 40,
+        opacity: 0,
+        duration: 0.8,
+        ease: 'power3.out',
+        scrollTrigger: {
+          trigger: header,
+          start: 'top 85%',
         }
-      )
+      })
+    })
+
+    // 2. Staggered Feature Cards Reveal
+    gsap.from('.feature-card', {
+      y: 60,
+      opacity: 0,
+      stagger: 0.15,
+      duration: 1,
+      ease: 'expo.out',
+      scrollTrigger: {
+        trigger: '.features-grid',
+        start: 'top 80%',
+      }
+    })
+
+    // 3. Tech Stack Stagger
+    gsap.from('.stack-item', {
+      x: -20,
+      opacity: 0,
+      stagger: 0.1,
+      duration: 0.8,
+      ease: 'power2.out',
+      scrollTrigger: {
+        trigger: '.stack-grid',
+        start: 'top 85%',
+      }
+    })
+
+    // 4. CTA Rings Parallax
+    gsap.to('.cta-ring-1', {
+      y: -50,
+      rotate: 45,
+      scrollTrigger: {
+        trigger: '.cta-section',
+        scrub: 1,
+      }
+    })
+
+    gsap.to('.cta-ring-2', {
+      y: 50,
+      rotate: -45,
+      scrollTrigger: {
+        trigger: '.cta-section',
+        scrub: 1,
+      }
+    })
+
+    // 5. CTA Content Reveal
+    gsap.from('.cta-inner > *', {
+      y: 30,
+      opacity: 0,
+      stagger: 0.1,
+      duration: 1,
+      ease: 'power3.out',
+      scrollTrigger: {
+        trigger: '.cta-inner',
+        start: 'top 80%',
+      }
     })
   }, { scope: mainRef })
 
   return (
-    <main id="main-content" ref={mainRef}>
+    <main id="main-content" ref={mainRef} className="landing-main">
+      <BackgroundCanvas />
       <HeroSection />
       <StatsStrip />
 
       {/* Features */}
       <section className="features-section section" id="features">
         <div className="container">
-          <div className="section-header reveal">
+          <div className="section-header">
             <span className="eyebrow">Core Features</span>
             <h2 className="display-section section-title">
               BUILT FOR<br /><span className="italic-accent">real</span> HEALTHCARE.
@@ -110,7 +169,7 @@ export default function Landing() {
             {FEATURES.map((f) => (
               <div
                 key={f.id}
-                className={`feat-card feature-card feature-card--${f.size} reveal`}
+                className={`feat-card feature-card feature-card--${f.size}`}
                 id={`feature-${f.id}`}
               >
                 <span className="eyebrow">{f.eyebrow}</span>
@@ -138,7 +197,7 @@ export default function Landing() {
       {/* Tech Stack */}
       <section className="stack-section section" id="stack">
         <div className="container">
-          <div className="section-header reveal">
+          <div className="section-header">
             <span className="eyebrow">Technology</span>
             <h2 className="display-section section-title">
               THE <span className="italic-accent">right</span> TOOL.<br />
@@ -149,9 +208,9 @@ export default function Landing() {
             </p>
           </div>
 
-          <div className="stack-grid reveal">
+          <div className="stack-grid">
             {STACK_ITEMS.map((item) => (
-              <div className="stack-item reveal" key={item.layer}>
+              <div className="stack-item" key={item.layer}>
                 <div className="stack-layer eyebrow">{item.layer}</div>
                 <div className="stack-tech">{item.tech}</div>
                 <div className="stack-detail body-small">{item.detail}</div>
@@ -164,7 +223,7 @@ export default function Landing() {
       {/* CTA */}
       <section className="cta-section section" id="cta">
         <div className="container">
-          <div className="cta-inner reveal">
+          <div className="cta-inner">
             <div className="cta-rings" aria-hidden="true">
               <div className="cta-ring cta-ring-1" />
               <div className="cta-ring cta-ring-2" />
@@ -181,7 +240,7 @@ export default function Landing() {
               <Link to="/onboard/signup" className="btn-primary" id="cta-get-started-btn">
                 Start for Free
               </Link>
-              <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="btn-secondary" id="cta-github-btn">
+              <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="btn-secondary" id="cta-github-btn">
                 Star on GitHub
               </a>
             </div>
@@ -209,7 +268,7 @@ export default function Landing() {
               </div>
               <div className="footer-col">
                 <div className="footer-col-title eyebrow">Community</div>
-                <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="footer-link">GitHub</a>
+                <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="footer-link">GitHub</a>
                 <a href="#" className="footer-link">Discord</a>
                 <a href="#" className="footer-link">Docs</a>
               </div>

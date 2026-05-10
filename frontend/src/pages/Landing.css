@@ -10,7 +10,7 @@
 }
 
 /* ── Features ──────────────────────────────────────────────── */
-.features-section { background: var(--bd-warm-dark); }
+.features-section { background: transparent; }
 
 .features-grid {
   display: grid;
@@ -106,7 +106,7 @@
 
 .stack-item {
   padding: var(--space-xl) var(--space-lg);
-  background: var(--bd-ink);
+  background: rgba(26, 24, 22, 0.8);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -132,7 +132,7 @@
 
 /* ── CTA ───────────────────────────────────────────────────── */
 .cta-section {
-  background: var(--bd-warm-dark);
+  background: transparent;
   border-top: 0.5px solid var(--bd-border);
 }
 
