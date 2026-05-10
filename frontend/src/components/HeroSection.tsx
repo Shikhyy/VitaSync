@@ -1,15 +1,24 @@
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import gsap from 'gsap'
+import { useGSAP } from '@gsap/react'
 import './HeroSection.css'
+
+const GITHUB_REPO_URL = 'https://github.com/Shikhyy/VitaSync'
 
 export default function HeroSection() {
   const particlesRef = useRef<HTMLDivElement>(null)
+  const heroRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const smallScreen = window.matchMedia('(max-width: 900px)').matches
+    if (reduceMotion || smallScreen) return
+
     const container = particlesRef.current
     if (!container) return
     container.innerHTML = ''
-    for (let i = 0; i < 28; i++) {
+    for (let i = 0; i < 10; i++) {
       const p = document.createElement('div')
       p.className = 'particle'
       p.style.left = `${Math.random() * 100}%`
@@ -21,8 +30,40 @@ export default function HeroSection() {
     }
   }, [])
 
+  useGSAP(() => {
+    const tl = gsap.timeline()
+
+    // Entrance
+    tl.from('.hero-eyebrow', { y: 20, opacity: 0, duration: 0.8, ease: 'power3.out' })
+      .from('.hero-title', { y: 40, opacity: 0, duration: 1, ease: 'expo.out' }, '-=0.5')
+      .from('.hero-subtitle', { y: 20, opacity: 0, duration: 0.8, ease: 'power2.out' }, '-=0.6')
+      .from('.hero-ctas', { y: 20, opacity: 0, duration: 0.8, ease: 'power2.out' }, '-=0.5')
+      .from('.hero-footnote', { opacity: 0, duration: 1 }, '-=0.4')
+
+    // Floating animation for rings
+    gsap.to('.ring', {
+      y: (i) => (i + 1) * 10,
+      rotate: (i) => (i % 2 === 0 ? 5 : -5),
+      duration: 3,
+      repeat: -1,
+      yoyo: true,
+      ease: 'sine.inOut'
+    })
+
+    // Parallax on scroll
+    gsap.to('.rings-container', {
+      y: 100,
+      opacity: 0.2,
+      scrollTrigger: {
+        trigger: '.hero',
+        start: 'top top',
+        scrub: true
+      }
+    })
+  }, { scope: heroRef })
+
   return (
-    <section className="hero" id="hero" aria-labelledby="hero-title">
+    <section className="hero" id="hero" aria-labelledby="hero-title" ref={heroRef}>
       {/* Orbiting rings */}
       <div className="rings-container" aria-hidden="true">
         <div className="ring ring-1" />
@@ -62,7 +103,7 @@ export default function HeroSection() {
               <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </Link>
-          <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="btn-secondary" id="hero-github-btn">
+          <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="btn-secondary" id="hero-github-btn">
             View on GitHub
           </a>
         </div>
