@@ -2,6 +2,7 @@ FROM python:3.12-slim
 
 # System dependencies for PyMuPDF and pytesseract
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     tesseract-ocr \
     libmupdf-dev \
     curl \
