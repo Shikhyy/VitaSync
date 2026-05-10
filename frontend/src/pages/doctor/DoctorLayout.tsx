@@ -13,11 +13,21 @@ export default function DoctorLayout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const handleLogout = () => {
     logout()
     navigate('/')
   }
+
+  const copyUserId = async () => {
+    if (!user?.id) return
+    await navigator.clipboard?.writeText(user.id)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1400)
+  }
+
+  const displayId = user?.id ? user.id.split('-')[0] || user.id.slice(0, 8) : ''
 
   return (
     <div className="dash-layout">
@@ -44,6 +54,13 @@ export default function DoctorLayout() {
           <div className="dash-user-info">
             <div className="dash-user-name">{user?.fullName || 'Doctor'}</div>
             <div className="dash-user-role badge">Clinician</div>
+            {user?.id && (
+              <button className="dash-id-card" onClick={copyUserId} title={`Copy doctor ID: ${user.id}`} type="button">
+                <span className="dash-id-label">Doctor ID</span>
+                <span className="dash-id-value">{displayId}</span>
+                <span className="dash-id-action">{copied ? 'Copied' : 'Copy'}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -82,7 +99,9 @@ export default function DoctorLayout() {
           </Link>
           <div className="dash-topbar-actions">
             <div className="live-dot" />
-            <span className="body-small" style={{ color: 'var(--bd-muted)' }}>Secure</span>
+            <button className="dash-topbar-id" onClick={copyUserId} type="button" title="Copy doctor ID">
+              {copied ? 'Copied' : `ID ${displayId || 'pending'}`}
+            </button>
           </div>
         </header>
 
