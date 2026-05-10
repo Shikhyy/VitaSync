@@ -32,6 +32,31 @@
 .wizard-title { font-size: 42px; letter-spacing: 3px; }
 .wizard-subtitle { color: var(--bd-muted); }
 
+.wizard-id-chip {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0.5px solid var(--bd-border);
+  background: rgba(248, 247, 229, 0.04);
+  color: var(--bd-orange);
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.wizard-id-chip span {
+  display: block;
+  margin-top: 4px;
+  color: var(--bd-cream);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  word-break: break-all;
+}
+
 .wizard-options {
   display: flex;
   flex-wrap: wrap;

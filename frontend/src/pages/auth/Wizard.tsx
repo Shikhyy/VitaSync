@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../../stores/authStore'
 import './Auth.css'
 import './Wizard.css'
 
@@ -26,6 +27,7 @@ const STEPS = [
 
 export default function Wizard() {
   const navigate = useNavigate()
+  const { user } = useAuthStore()
   const [step, setStep] = useState(0)
   const [selections, setSelections] = useState<Record<string, Set<string>>>({})
 
@@ -48,6 +50,10 @@ export default function Wizard() {
   }
 
   const progress = ((step + 1) / STEPS.length) * 100
+  const copyUserId = async () => {
+    if (!user?.id) return
+    await navigator.clipboard?.writeText(user.id)
+  }
 
   return (
     <main className="auth-page" id="main-content">
@@ -68,6 +74,11 @@ export default function Wizard() {
             {currentStep.title}
           </h1>
           <p className="body-small wizard-subtitle">{currentStep.subtitle}</p>
+          {user?.id && (
+            <button className="wizard-id-chip" onClick={copyUserId} type="button" title="Copy patient ID">
+              Patient ID: <span>{user.id}</span>
+            </button>
+          )}
         </div>
 
         <div className="wizard-options">
