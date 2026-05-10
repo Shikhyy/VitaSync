@@ -2,21 +2,37 @@ import { useEffect } from 'react'
 
 export function useCardTilt() {
   useEffect(() => {
+    const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!canHover || reduceMotion) return
+
+    let frame = 0
+    let latestEvent: MouseEvent | null = null
+
     const handleMouseMove = (e: MouseEvent) => {
+      latestEvent = e
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        if (!latestEvent) return
+        applyTilt(latestEvent)
+      })
+    }
+
+    const applyTilt = (e: MouseEvent) => {
       const card = e.currentTarget as HTMLElement
       const rect = card.getBoundingClientRect()
       const x = (e.clientX - rect.left) / rect.width - 0.5
       const y = (e.clientY - rect.top) / rect.height - 0.5
-      // Max tilt: 6 degrees
-      card.style.transform = `translateY(-6px) rotateX(${-y * 6}deg) rotateY(${x * 6}deg)`
+      card.style.transform = `translateY(-3px) rotateX(${-y * 3}deg) rotateY(${x * 3}deg)`
     }
 
     const handleMouseLeave = (e: MouseEvent) => {
+      latestEvent = null
       const card = e.currentTarget as HTMLElement
       card.style.transform = ''
     }
 
-    // Small delay to ensure DOM is painted, then attach listeners to all .feat-card elements
     const attachListeners = () => {
       const cards = document.querySelectorAll('.feat-card')
       cards.forEach(card => {
@@ -32,19 +48,8 @@ export function useCardTilt() {
 
     attachListeners()
 
-    // Re-attach if mutations occur (e.g. new records added)
-    const observer = new MutationObserver((mutations) => {
-      let shouldReattach = false
-      mutations.forEach(m => {
-        if (m.addedNodes.length > 0) shouldReattach = true
-      })
-      if (shouldReattach) attachListeners()
-    })
-
-    observer.observe(document.body, { childList: true, subtree: true })
-
     return () => {
-      observer.disconnect()
+      if (frame) cancelAnimationFrame(frame)
       const cards = document.querySelectorAll('.feat-card')
       cards.forEach(card => {
         const htmlCard = card as HTMLElement
