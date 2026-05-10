@@ -27,11 +27,7 @@ class QueryState(TypedDict):
 async def semantic_search_node(state: QueryState) -> QueryState:
     """Step 1: Retrieve context from pgvector."""
     logger.info("Executing semantic_search_node")
-    docs = await semantic_search.search(
-        state["patient_id"],
-        state["question"],
-        top_k=5
-    )
+    docs = await semantic_search.search(state["patient_id"], state["question"], top_k=5)
     state["context_docs"] = docs
     state["search_iterations"] += 1
     return state
@@ -40,8 +36,6 @@ async def semantic_search_node(state: QueryState) -> QueryState:
 async def ml_context_node(state: QueryState) -> QueryState:
     """Step 2: Get patient's ML risk scores."""
     logger.info("Executing ml_context_node")
-    # In production, RiskPredictor would fetch from DB.
-    # Using mock feature context here for demonstration.
     risk = risk_predictor.get_risk_summary(state["patient_id"])
     state["ml_context"] = risk
     return state
@@ -72,7 +66,6 @@ async def llm_reasoning_node(state: QueryState) -> QueryState:
     answer = await vllm_client.generate(prompt)
     
     state["llm_draft"] = answer
-    # Mock confidence logic: if we found very few docs or iteration == 1 and mock mode, simulate low confidence sometimes
     state["confidence"] = 0.9 if len(state["context_docs"]) > 0 else 0.4
     return state
 
@@ -98,16 +91,16 @@ def build_query_graph():
     """Build and compile the LangGraph state machine."""
     workflow = StateGraph(QueryState)
 
-    workflow.add_node("semantic_search", semantic_search_node)
-    workflow.add_node("ml_context", ml_context_node)
-    workflow.add_node("llm_reasoning", llm_reasoning_node)
-    workflow.add_node("citation_check", citation_check_node)
-    workflow.add_node("format_response", format_response_node)
+    workflow.add_node("semantic_search_step", semantic_search_node)
+    workflow.add_node("ml_context_step", ml_context_node)
+    workflow.add_node("llm_reasoning_step", llm_reasoning_node)
+    workflow.add_node("citation_check_step", citation_check_node)
+    workflow.add_node("format_response_step", format_response_node)
 
-    workflow.set_entry_point("semantic_search")
-    workflow.add_edge("semantic_search", "ml_context")
-    workflow.add_edge("ml_context", "llm_reasoning")
-    workflow.add_edge("llm_reasoning", "citation_check")
+    workflow.set_entry_point("semantic_search_step")
+    workflow.add_edge("semantic_search_step", "ml_context_step")
+    workflow.add_edge("ml_context_step", "llm_reasoning_step")
+    workflow.add_edge("llm_reasoning_step", "citation_check_step")
 
     # Conditional edge: if confidence < 0.6 and we haven't searched too much, search again
     def check_confidence(state: QueryState) -> str:
@@ -117,15 +110,15 @@ def build_query_graph():
         return "format_response"
 
     workflow.add_conditional_edges(
-        "citation_check",
+        "citation_check_step",
         check_confidence,
         {
-            "semantic_search": "semantic_search",
-            "format_response": "format_response"
+            "semantic_search": "semantic_search_step",
+            "format_response": "format_response_step"
         }
     )
 
-    workflow.add_edge("format_response", END)
+    workflow.add_edge("format_response_step", END)
     
     return workflow.compile()
 
