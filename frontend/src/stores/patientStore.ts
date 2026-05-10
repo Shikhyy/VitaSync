@@ -43,16 +43,19 @@ interface PatientState {
 }
 
 export const usePatientStore = create<PatientState>((set) => ({
-  riskScores: { diabetes: 0.34, cardiovascular: 0.18, ckd: 0.09 },
+  riskScores: { diabetes: 0, cardiovascular: 0, ckd: 0 },
   alerts: [],
   documents: [],
   unreadAlertCount: 0,
   setRiskScores: (riskScores) => set({ riskScores }),
   addAlert: (alert) =>
-    set((s) => ({
-      alerts: [alert, ...s.alerts],
-      unreadAlertCount: s.unreadAlertCount + (alert.isRead ? 0 : 1),
-    })),
+    set((s) => {
+      if (s.alerts.some((existing) => existing.id === alert.id)) return s
+      return {
+        alerts: [alert, ...s.alerts],
+        unreadAlertCount: s.unreadAlertCount + (alert.isRead ? 0 : 1),
+      }
+    }),
   markAlertRead: (id) =>
     set((s) => ({
       alerts: s.alerts.map((a) => (a.id === id ? { ...a, isRead: true } : a)),
