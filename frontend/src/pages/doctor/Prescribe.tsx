@@ -1,58 +1,62 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { checkDrugInteraction } from '../../lib/api'
 import './Doctor.css'
 
-const CURRENT_MEDS = [
-  { name: 'Metformin', dosage: '500mg', frequency: 'twice daily' },
-  { name: 'Lisinopril', dosage: '10mg', frequency: 'once daily' },
-  { name: 'Aspirin', dosage: '100mg', frequency: 'once daily' },
-]
-
-const KNOWN_INTERACTIONS = [
-  {
-    drug1: 'Warfarin',
-    drug2: 'Aspirin 100mg',
-    severity: 'high',
-    description: 'Combined anticoagulant + antiplatelet therapy significantly increases bleeding risk, particularly GI and intracranial haemorrhage.',
-    evidence: 'PMID 19234567 · DrugBank DB00682',
-    recommendation: 'Avoid combination. Consider alternative anticoagulation or monitor INR very closely.',
-  },
-  {
-    drug1: 'Metformin',
-    drug2: 'Ibuprofen',
-    severity: 'moderate',
-    description: 'NSAIDs may reduce renal clearance of metformin, increasing risk of lactic acidosis, especially in patients with renal impairment.',
-    evidence: 'DrugBank DB00331',
-    recommendation: 'Use paracetamol/acetaminophen instead. If NSAID required, monitor renal function.',
-  },
-]
-
 export default function Prescribe() {
-  useParams()
+  const { id: patientId } = useParams()
   const [newDrug, setNewDrug] = useState('')
+  const [currentMedsText, setCurrentMedsText] = useState('')
   const [checked, setChecked] = useState(false)
   const [checking, setChecking] = useState(false)
-  const [interactions, setInteractions] = useState<typeof KNOWN_INTERACTIONS>([])
+  const [interactions, setInteractions] = useState<Array<{
+    drug1: string
+    drug2: string
+    severity: string
+    description: string
+    evidence: string
+    recommendation: string
+  }>>([])
+  const [error, setError] = useState('')
 
   const handleCheck = async () => {
     if (!newDrug.trim()) return
+    const currentMedications = currentMedsText
+      .split('\n')
+      .map((med) => med.trim())
+      .filter(Boolean)
+
+    if (currentMedications.length === 0) {
+      setError('Enter the patient current medications from the chart before running an audit.')
+      return
+    }
+
     setChecking(true)
     setChecked(false)
-    await new Promise((r) => setTimeout(r, 1000))
-    // Mock: Warfarin triggers interaction
-    const found = KNOWN_INTERACTIONS.filter((i) =>
-      newDrug.toLowerCase().includes(i.drug1.toLowerCase())
-    )
-    setInteractions(found)
-    setChecked(true)
-    setChecking(false)
+    setError('')
+    try {
+      const result = await checkDrugInteraction(newDrug, currentMedications)
+      setInteractions(result.interactions.map((i) => ({
+        drug1: i.drug_a,
+        drug2: i.drug_b,
+        severity: i.severity,
+        description: i.description,
+        evidence: i.evidence,
+        recommendation: i.recommendation,
+      })))
+      setChecked(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Drug interaction check failed')
+    } finally {
+      setChecking(false)
+    }
   }
 
   return (
     <div className="doctor-portal-wrapper">
        <header className="doctor-header">
         <div className="header-titles">
-          <span className="eyebrow">Clinician Workspace · Patient VS-4729-A</span>
+          <span className="eyebrow">Clinician Workspace · Patient {patientId?.slice(0, 8) || 'record'}</span>
           <h1 className="display-section">CLINICAL <span className="italic-accent">audit.</span></h1>
           <p className="body-small" style={{ color: 'var(--bd-muted)', marginTop: 4 }}>
             Drug-Drug Interaction Analysis (DDI)
@@ -68,22 +72,22 @@ export default function Prescribe() {
 
       <div className="doctor-content-grid">
         <div className="patient-list-section">
-          {/* Current meds */}
           <div className="aside-widget">
-            <span className="eyebrow">Patient's Current Regimen</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-              {CURRENT_MEDS.map((m) => (
-                <div key={m.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'rgba(255,255,255,0.02)', border: '0.5px solid var(--bd-border)', borderRadius: 2 }}>
-                  <span style={{ fontWeight: 600, color: 'var(--bd-cream)' }}>{m.name}</span>
-                  <span className="body-small">{m.dosage} · {m.frequency}</span>
-                </div>
-              ))}
-            </div>
+            <span className="eyebrow">Patient Current Regimen</span>
+            <textarea
+              className="input"
+              style={{ minHeight: 140, marginTop: 12, resize: 'vertical', background: 'rgba(0,0,0,0.2)', border: '0.5px solid var(--bd-border)' }}
+              placeholder={'Paste one medication per line from the patient chart\\nExample: Aspirin 100mg\\nMetformin 500mg'}
+              value={currentMedsText}
+              onChange={(e) => setCurrentMedsText(e.target.value)}
+            />
+            <p className="body-small" style={{ color: 'var(--bd-muted)', marginTop: 12 }}>
+              VitaSync will only audit what you enter or extract from real records.
+            </p>
           </div>
 
-          {/* Drug input */}
           <div className="aside-widget" style={{ marginTop: 'var(--space-xl)' }}>
-            <label className="input-label">Simulate New Prescription</label>
+            <label className="input-label">New Prescription Candidate</label>
             <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
               <input
                 className="input"
@@ -102,9 +106,6 @@ export default function Prescribe() {
                 {checking ? 'Checking...' : 'Check →'}
               </button>
             </div>
-            <p className="body-small" style={{ color: 'var(--bd-muted)', marginTop: 12 }}>
-              Try: <code className="text-orange">Warfarin</code> or <code className="text-orange">Ibuprofen</code>
-            </p>
           </div>
         </div>
 
@@ -146,7 +147,14 @@ export default function Prescribe() {
             </div>
           )}
 
-          {!checked && !checking && (
+          {error && !checking && (
+            <div className="aside-widget" style={{ borderColor: 'var(--color-danger)', background: 'rgba(248,113,113,0.05)' }}>
+              <span className="eyebrow">Audit failed</span>
+              <p className="body-small" style={{ marginTop: 12 }}>{error}</p>
+            </div>
+          )}
+
+          {!checked && !checking && !error && (
             <div className="aside-widget" style={{ opacity: 0.5, textAlign: 'center', padding: '40px 20px' }}>
               <span style={{ fontSize: 40, display: 'block', marginBottom: 16 }}>💊</span>
               <p className="body-small">Audit interactions before<br />finalising prescription.</p>
