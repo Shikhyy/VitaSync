@@ -56,6 +56,13 @@ class SeverityEnum(str, enum.Enum):
     critical = "critical"
 
 
+class ConsultationStatusEnum(str, enum.Enum):
+    pending = "pending"
+    confirmed = "confirmed"
+    cancelled = "cancelled"
+    completed = "completed"
+
+
 # ── Models ────────────────────────────────────────────────────────
 class User(Base):
     """Platform user — either a patient or a licensed clinician."""
@@ -202,3 +209,36 @@ class DocumentChunk(Base):
 
     patient = relationship("User")
     document = relationship("Document")
+
+
+class Consultation(Base):
+    """Scheduled consultation between a patient and clinician."""
+
+    __tablename__ = "consultations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid_module.uuid4)
+    patient_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    doctor_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    doctor_name = Column(String(200), nullable=False)
+    slot_time = Column(DateTime(timezone=True), nullable=False)
+    reason = Column(Text)
+    status = Column(Enum(ConsultationStatusEnum), default=ConsultationStatusEnum.pending, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    patient = relationship("User", foreign_keys=[patient_id])
+    doctor = relationship("User", foreign_keys=[doctor_id])
+
+
+class Message(Base):
+    """Secure message between two VitaSync users."""
+
+    __tablename__ = "messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid_module.uuid4)
+    sender_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    recipient_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    sender = relationship("User", foreign_keys=[sender_id])
+    recipient = relationship("User", foreign_keys=[recipient_id])
