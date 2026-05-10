@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import { usePatientStore } from '../../stores/patientStore'
-import { mockPatientData } from '../../lib/api'
+import { listAlerts } from '../../lib/api'
+import { useAuthStore } from '../../stores/authStore'
 import './Dashboard.css'
 
 const SEVERITY_STYLES = {
@@ -9,8 +11,28 @@ const SEVERITY_STYLES = {
 }
 
 export default function Alerts() {
-  const { markAlertRead } = usePatientStore()
-  const alerts = mockPatientData.alerts
+  const { user } = useAuthStore()
+  const { alerts: liveAlerts, addAlert, markAlertRead } = usePatientStore()
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!user) return
+    listAlerts(user.id)
+      .then((items) => {
+        items.forEach((alert) => addAlert({
+          id: alert.id,
+          type: alert.type,
+          severity: alert.severity,
+          title: alert.title,
+          body: alert.body,
+          sourceLabName: alert.source_lab_name || undefined,
+          mlScore: alert.ml_score || undefined,
+          isRead: alert.is_read,
+          createdAt: alert.created_at,
+        }))
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load alerts'))
+  }, [addAlert, user])
 
   return (
     <div className="dash-page" id="dashboard-alerts">
@@ -43,14 +65,19 @@ export default function Alerts() {
         </div>
       </div>
 
-      {/* Alerts list */}
+      {error && (
+        <div className="no-alerts" style={{ color: 'var(--color-danger)', borderColor: 'rgba(248,113,113,0.2)', background: 'rgba(248,113,113,0.05)' }}>
+          {error}
+        </div>
+      )}
+
       <div className="alert-feed">
-        {alerts.length === 0 ? (
+        {liveAlerts.length === 0 ? (
           <div className="no-alerts">
             <span>✓</span> No alerts. Your monitoring agent is watching.
           </div>
         ) : (
-          alerts.map((alert) => {
+          liveAlerts.map((alert) => {
             const style = SEVERITY_STYLES[alert.severity as keyof typeof SEVERITY_STYLES]
             return (
               <div
