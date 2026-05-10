@@ -1,0 +1,188 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: vitasync-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vitasync}
+      POSTGRES_USER: ${POSTGRES_USER:-vitasync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-vitasync}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: vitasync-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mindsdb:
+    image: mindsdb/mindsdb:latest
+    container_name: vitasync-mindsdb
+    restart: unless-stopped
+    volumes:
+      - mindsdb_data:/root/mindsdb_storage
+    environment:
+      MINDSDB_STORAGE_DIR: /root/mindsdb_storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  minio:
+    image: minio/minio:latest
+    container_name: vitasync-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-vitasync}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  vllm:
+    image: vllm/vllm-openai-rocm:latest
+    container_name: vitasync-vllm
+    restart: unless-stopped
+    command:
+      - --model
+      - ${VLLM_MODEL:-Qwen/Qwen2.5-72B-Instruct}
+      - --tensor-parallel-size
+      - ${VLLM_TENSOR_PARALLEL_SIZE:-1}
+      - --dtype
+      - ${VLLM_DTYPE:-float16}
+      - --max-model-len
+      - ${VLLM_MAX_MODEL_LEN:-32768}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+      - render
+    ipc: host
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    ports:
+      - "${VLLM_PORT:-8001}:8001"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30m
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vitasync-api
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vitasync}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vitasync}
+      REDIS_URL: redis://redis:6379/0
+      MINDSDB_URL: http://mindsdb:47334
+      MINIO_URL: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-vitasync}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      VLLM_URL: http://vllm:8001
+      VLLM_MODEL: ${VLLM_MODEL:-Qwen/Qwen2.5-72B-Instruct}
+      DEV_MODE: "false"
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://165.245.142.215}
+      X402_ENABLED: ${X402_ENABLED:-false}
+      X402_PAY_TO: ${X402_PAY_TO:-}
+      X402_FACILITATOR_URL: ${X402_FACILITATOR_URL:-}
+      X402_NETWORK: ${X402_NETWORK:-eip155:8453}
+      X402_ASSET: ${X402_ASSET:-USDC}
+      X402_ASSET_ADDRESS: ${X402_ASSET_ADDRESS:-}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vllm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vitasync-celery
+    restart: unless-stopped
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=${CELERY_CONCURRENCY:-4}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vitasync}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vitasync}
+      REDIS_URL: redis://redis:6379/0
+      DEV_MODE: "false"
+      VLLM_URL: http://vllm:8001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vllm:
+        condition: service_healthy
+
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vitasync-celery-beat
+    restart: unless-stopped
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DEV_MODE: "false"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_DEV_MODE: "false"
+    container_name: vitasync-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  mindsdb_data:
+  minio_data:
