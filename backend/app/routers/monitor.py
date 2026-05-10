@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import AsyncSessionLocal, get_db
 from app.ml.anomaly_detector import AnomalyDetector
 from app.ml.risk_predictor import RiskPredictor
+from app.models.models import Alert, AlertTypeEnum, SeverityEnum
 from app.routers.auth import get_current_user
 from app.schemas.monitor import AlertResponse, AlertType, Severity
 
@@ -16,9 +21,6 @@ router = APIRouter()
 anomaly_detector = AnomalyDetector()
 risk_predictor = RiskPredictor()
 
-# In-memory alert store per patient
-_ALERTS: dict[str, list[dict]] = {}
-
 # Connected WebSocket clients
 _WS_CLIENTS: dict[str, list[WebSocket]] = {}
 
@@ -27,6 +29,7 @@ _WS_CLIENTS: dict[str, list[WebSocket]] = {}
 async def get_patient_alerts(
     patient_id: str,
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> list[AlertResponse]:
     """Retrieve all alerts for a patient, newest first.
 
@@ -37,9 +40,14 @@ async def get_patient_alerts(
     Returns:
         List of alert objects sorted by creation time descending.
     """
-    # In production: verify consent if doctor is requesting
-    alerts = _ALERTS.get(patient_id, [])
-    return [AlertResponse(**a) for a in reversed(alerts)]
+    if current_user["role"] == "patient" and current_user["id"] != patient_id:
+        return []
+    result = await db.scalars(
+        select(Alert)
+        .where(Alert.patient_id == _parse_uuid(patient_id, "patient_id"))
+        .order_by(Alert.created_at.desc())
+    )
+    return [_alert_response(alert) for alert in result.all()]
 
 
 @router.websocket("/ws/{patient_id}")
@@ -95,28 +103,50 @@ async def create_and_broadcast_alert(
         source_lab_name: Lab marker that triggered the alert.
         ml_score: Raw ML classification score.
     """
-    import uuid
-    alert = {
-        "id": str(uuid.uuid4()),
-        "patient_id": patient_id,
-        "type": alert_type,
-        "severity": severity,
-        "title": title,
-        "body": body,
-        "source_lab_name": source_lab_name,
-        "ml_score": ml_score,
-        "is_read": False,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if patient_id not in _ALERTS:
-        _ALERTS[patient_id] = []
-    _ALERTS[patient_id].append(alert)
+    async with AsyncSessionLocal() as session:
+        alert = Alert(
+            patient_id=_parse_uuid(patient_id, "patient_id"),
+            alert_type=AlertTypeEnum(alert_type.value),
+            severity=SeverityEnum(severity.value),
+            title=title,
+            body=body,
+            source_lab_name=source_lab_name,
+            ml_score=ml_score,
+            is_read=False,
+        )
+        session.add(alert)
+        await session.commit()
+        await session.refresh(alert)
+
+    payload = _alert_response(alert).model_dump(mode="json")
 
     # Broadcast to all connected WebSocket clients
     ws_list = _WS_CLIENTS.get(patient_id, [])
     for ws in ws_list:
         try:
             import json
-            await ws.send_text(json.dumps(alert))
+            await ws.send_text(json.dumps(payload))
         except Exception as e:
             logger.warning("WebSocket send failed: %s", e)
+
+
+def _alert_response(alert: Alert) -> AlertResponse:
+    return AlertResponse(
+        id=str(alert.id),
+        patient_id=str(alert.patient_id),
+        type=AlertType(alert.alert_type.value if hasattr(alert.alert_type, "value") else str(alert.alert_type)),
+        severity=Severity(alert.severity.value if hasattr(alert.severity, "value") else str(alert.severity)),
+        title=alert.title,
+        body=alert.body,
+        source_lab_name=alert.source_lab_name,
+        ml_score=alert.ml_score,
+        is_read=alert.is_read,
+        created_at=alert.created_at.isoformat() if alert.created_at else datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def _parse_uuid(value: str, field_name: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name}")
